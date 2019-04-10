@@ -90,5 +90,5 @@ class ucsFunctions:
     def returnData(self, strText, data, path):
         file = open(path, 'a')
         print(     strText.format(*data))
-        file.write(strText.format(*data))
+        file.write("{}\n".format(strText.format(*data)))
         file.close()
