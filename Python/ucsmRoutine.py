@@ -1,0 +1,81 @@
+__Version__    = "20151007.03.2"
+
+import xml.dom.minidom as XML
+import re as regex
+import time
+
+from common import urlFunctions
+URL = urlFunctions()
+
+
+class ucsFunctions:
+    def __init__(self):
+        return
+
+    def getUnit (self, authCookie, url, location):
+        FinalList = []
+        queryXML = '<configScope dn="sys" cookie="{0}" inClass="{1}" inHierarchical="false" inRecursive="false"> <inFilter></inFilter> </configScope>'.format(authCookie, location )
+        ucsRackMountsRaw = URL.getData(url, queryXML)
+        ucsRackMounts = XML.parseString(ucsRackMountsRaw).getElementsByTagName(location)
+        for ucsRackMount in ucsRackMounts:
+            result = {}
+            result['serial'] = (ucsRackMount.attributes['serial'].value)
+            result['model']  = (ucsRackMount.attributes['model' ].value)
+            result['dn']     = (ucsRackMount.attributes['dn'    ].value)
+            FinalList.append(result)
+        return FinalList
+
+    def getMemory (self,authCookie, url, targetDN, path):
+        FullMemoryList = []
+        queryXML = '<configResolveChildren cookie="{0}" inDn="{1}" inHierarchical="true"></configResolveChildren>'.format(authCookie, targetDN)
+        ucsMemoryRaw = URL.getData(url, queryXML)
+        ucsMemory = sorted(XML.parseString(ucsMemoryRaw).getElementsByTagName('memoryUnit'), key=lambda x: str(x.attributes['location'].value))
+        for module in ucsMemory:
+            self.writeModule(module, path)
+            MemoryStats =  self.getMemoryStats(module, path)
+            if MemoryStats:
+                self.processMemoryStats(MemoryStats, path)
+
+    def getMemoryStats (self, module, path):
+        Status = False
+        memoryErrorStats = module.getElementsByTagName('memoryErrorStats')
+        for memoryErrorStat in memoryErrorStats:
+            fields = memoryErrorStat._get_attributes().items()
+            for field in fields:
+                if regex.match("^[1-9][0-9]*$", field[1]) and regex.match(".+[e|E]rror.+", field[0]):
+                    self.writeError(field, path)
+
+    def writeTimeStamp(self, path):
+        timeStamp = time.asctime(time.localtime())
+        self.returnData("{0}", timeStamp, path)
+
+    def writeCompute (self, Line, path):
+        serial = (Line['serial']).replace("'",'')
+        model  = (Line['model' ]).replace("'",'')
+        computeData    = [serial, model]
+        computeStr = "\n\nSerial: {0:<20s} Model: {1:<20s}"
+        self.returnData(computeStr,computeData, path)
+
+    def writeModule (self, module, path):
+        location     = (module.attributes['location'].value).replace('DIMM_','')
+        capacity     = (module.attributes['capacity'].value)
+        serialNumber = (module.attributes['serial'  ].value)
+        model        = (module.attributes['model'   ].value)
+        vendor       = (module.attributes['vendor'  ].value)
+        if (model or serialNumber):
+            moduleData = [location, capacity, serialNumber, model, vendor]
+            moduleStr = "Location: {0:6s}Capacity: {1:<10s}Serial: {2:<12s} Model: {3:<20s} Vendor: {4:<15}"
+            self.returnData(moduleStr, moduleData, path)
+
+    def writeError (self, field, path):
+        file = open(path, 'a')
+        eventName  = repr(field[0].encode('ascii')).ljust(30)
+        eventCount = field[1]
+        file.write("\t\t{0}\t{1}\n".format(eventName.replace("'",''), eventCount))
+        file.close()
+
+    def returnData(self, strText, data, path):
+        file = open(path, 'a')
+        print(     strText.format(*data))
+        file.write(strText.format(*data))
+        file.close()
