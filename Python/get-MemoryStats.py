@@ -16,6 +16,10 @@ __Version__    = "20151007.03.2"
 
 
 import getpass
+import sys
+import os
+
+sys.path.append(os.getcwd()+'/bin')
 
 from common      import inputSupport
 from common      import timeFunctions
@@ -24,7 +28,7 @@ from ucsmRoutine import ucsFunctions
 from CRoutine    import ucsCFunctions
 
 timeFunctions   = timeFunctions()
-ucsF 		    = ucsFunctions()
+ucsF 	        = ucsFunctions()
 ucsC            = ucsCFunctions()
 URL             = urlFunctions()
 YesNo           = inputSupport()
