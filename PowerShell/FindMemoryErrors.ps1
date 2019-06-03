@@ -14,7 +14,7 @@ or implied.
 
 .DESCRIPTION
 This script assumes you are already connected to the domain you want to
-assess. Please see the connect-ucs commandlet for connecting to a server.
+assess. Please see the connect-ucs commandlet for connecting to a UCS Domain.
 #>
 
 $output = ""
