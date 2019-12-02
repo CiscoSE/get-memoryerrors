@@ -12,14 +12,8 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-<<<<<<< HEAD
 __Version__    = "20191202.1"
 import requests
-=======
-__Version__    = "20151007.03.2"
-
-import urllib3
->>>>>>> 999f7df8a793201de051f30fff77461cfbd746e1
 import ssl
 import time
 import os
