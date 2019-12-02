@@ -14,7 +14,7 @@ or implied.
 
 __Version__    = "20151007.03.2"
 
-import urllib2
+import urllib3
 import ssl
 import time
 import os
@@ -32,7 +32,7 @@ class inputSupport:
         while questionExit == True:
             os.system('clear')
             print (message + "[Yes / No]")
-            newServerName = raw_input().lower()
+            newServerName = input().lower()
             if newServerName in ['yes', 'y', 'ye']:
                 return True
             elif newServerName in ['no','n']:
