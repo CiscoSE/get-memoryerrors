@@ -12,7 +12,7 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20190428.1"
+__Version__    = "20191202.1"
 
 
 import getpass
@@ -70,7 +70,7 @@ authCookie =  URL.getCookie(url, data)
 
 systemType = URL.getTopInfo(url, authCookie)
 if systemType == 'stand-alone':
-    print("Standa-Alone Support not yet implemented in this version")
+    print("Stand-Alone Support not yet implemented in this version")
     #We can only get inventory on stand alone servers.
     #Line = ucsC.getServerModel(url, authCookie)
     #ucsF.writeCompute(Line, path)
