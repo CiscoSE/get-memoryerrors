@@ -48,10 +48,10 @@ The default user name is "admin". Do you want to use this name to connect to {0}
 """.format(adminName)
 
 if YesNo.answerYesNo(opening) == False:
-        serverName = raw_input('Enter new server name:\t')
+        serverName = input('Enter new server name:\t')
 
 if YesNo.answerYesNo(userNamePrompt) == False:
-        adminName  = raw_input('Enter new admin name:\t')
+        adminName  = input('Enter new admin name:\t')
 
 fileTime = timeFunctions.getCurrentTime()
 #File Name

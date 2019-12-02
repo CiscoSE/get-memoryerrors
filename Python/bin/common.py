@@ -12,16 +12,15 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20151007.03.2"
-
-import urllib2
+__Version__    = "20191202.1"
+import requests
 import ssl
 import time
 import os
 import xml.dom.minidom as XML
 
-if hasattr(ssl, '_create_unverified_context'):
-    ssl._create_default_https_context = ssl._create_unverified_context
+from urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 class inputSupport:
     def __init__(self):
@@ -32,7 +31,7 @@ class inputSupport:
         while questionExit == True:
             os.system('clear')
             print (message + "[Yes / No]")
-            newServerName = raw_input().lower()
+            newServerName = input().lower()
             if newServerName in ['yes', 'y', 'ye']:
                 return True
             elif newServerName in ['no','n']:
@@ -49,9 +48,11 @@ class urlFunctions:
     def __init__(self):
         return
     def getData(self, url, data):
-        request = urllib2.Request(url, data, {"Content-Type": "text/xml"})
-        response = urllib2.urlopen(request)
-        return response.read()
+        headers = {"Content-Type": "text/xml"}
+        request = requests.post(url, data=data, headers=headers, verify=False)
+        #request = urllib3.Request(url, data, {"Content-Type": "text/xml"})
+        #response = urllib3.urlopen(request)
+        return (request.text)
 
     def getCookie(self, url, data):
         response = self.getData(url, data)
