@@ -50,21 +50,21 @@ argsParse.add_argument('--verbose',  action='store_true',   dest='verbose',    d
 args = argsParse.parse_args()
 
 if (args.verbose):
-    print('\033[1;32;40mServer:      {0}'.format(args.serverName))
-    print('\033[1;32;40mUser:        {0}'.format(args.adminName))
-    print('\033[1;32;40mdirectory:   {0}'.format(args.directory))
-    print('\033[1;32;40mverbose:     {0}'.format(args.verbose))
+    print('\033[1;32;40mServer:      {0}\033[0m]'.format(args.serverName))
+    print('\033[1;32;40mUser:        {0}\033[0m]'.format(args.adminName))
+    print('\033[1;32;40mdirectory:   {0}\033[0m]'.format(args.directory))
+    print('\033[1;32;40mverbose:     {0}\033[0m]'.format(args.verbose))
 
 fileTime = timeFunctions.getCurrentTime()
 #File Name
 path = '{0}/{1}-MemoryErrors.log'.format(args.directory, fileTime)
 if (args.verbose):
-    print("\033[1;32;40mFile Path:   {0}".format(path))
+    print("\033[1;32;40mFile Path:   {0}\033[0m]".format(path))
 
 # URL used for access to UCS. UCS uses a single URL for everything until RedFish matures.
 url = 'https://{0}/nuova'.format(args.serverName)
 if (args.verbose):
-    print("\033[1;32;40mURL:         {0}".format(url))
+    print("\033[1;32;40mURL:         {0}\033[0m]".format(url))
 
 # This line is used for authentication. We don't reprint it in verbose to protect the password. 
 data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(args.adminName, getpass.getpass())
@@ -72,7 +72,7 @@ data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(args.adminName, getpa
 # Get a cookie. We use this for all further communcations with the server. 
 authCookie =  URL.getCookie(url, data)
 if (args.verbose):
-    print("\033[1;32;40mCookie:      {0}".format(authCookie))
+    print("\033[1;32;40mCookie:      {0}\033[0m]".format(authCookie))
 
 systemType = URL.getTopInfo(url, authCookie)
 if systemType == 'stand-alone':
@@ -81,14 +81,14 @@ if systemType == 'stand-alone':
 elif systemType == 'cluster':
     #Get all rack units
     if (args.verbose):
-        print('\033[1;32;40mSystem Type: Cluster')
+        print('\033[1;32;40mSystem Type: Cluster\033[0m]')
     for Line in ucsF.getUnit(authCookie, url, "computeRackUnit"):
-        print("\033[1;32;40m\n\nUnit:        {0}".format(Line))
+        print("\033[40m\n\nUnit:        {0}\033[0m]".format(Line))
         ucsF.writeCompute(Line, path)
         ucsF.getMemory (authCookie, url, Line['dn'], path)
     #Get all blade servers
     for Line in ucsF.getUnit(authCookie, url, "computeBlade"):
-        print("\033[1;32;40m\n\nUnit:        {0}".format(Line))
+        print("\033[40m\n\nUnit:        {0}\033[0m]".format(Line))
         ucsF.writeCompute(Line, path)
         ucsF.getMemory (authCookie, url, Line['dn'], path)
 #Clean up cookie when script exits normally.
