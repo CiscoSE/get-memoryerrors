@@ -19,6 +19,7 @@ import time
 import os
 import xml.dom.minidom as XML
 
+#Required for self signed certificate handling.
 from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 

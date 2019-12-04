@@ -18,6 +18,7 @@ __Version__    = "20191202.1"
 import getpass
 import sys
 import os
+import argparse
 
 sys.path.append(os.getcwd()+'/bin')
 
@@ -33,37 +34,40 @@ ucsC            = ucsCFunctions()
 URL             = urlFunctions()
 YesNo           = inputSupport()
 
-serverName = '10.82.6.106'
-adminName  = 'admin'
+defaultAdminName  = 'admin'
+defaultServerName = 'Put your UCS Manager IP here'
 
-opening = """
-This tool lists all memory in a UCS domain and presents any errors associated with each DIMM.
-Do you want to test {0} for memory errors (which is the default for this script)? Type "no" if you
-wish to enter a different IP address or server name.
-""".format(serverName)
+#Argument Handling
+helpmsg = '''
+This tool connects to UCS and pulls memory information. 
+All memory modules in a domain are listed (if visible to UCSM).
+Memory statistics are only provided if errors are found.
+'''
 
-userNamePrompt = """
-The default user name is "admin". Do you want to use this name to connect to {0}?
+argsParse = argparse.ArgumentParser(description=helpmsg)
+argsParse.add_argument('-server',   action='store',        dest='serverName', default=defaultServerName, required=False,  help='Cluster IP for UCS Manager')
+argsParse.add_argument('-user',     action='store',        dest='adminName',  default=defaultAdminName,  required=False,  help='User name to access UCS Manager')
+argsParse.add_argument('-d',        action='store',        dest='directory',  default='./reports',       required=False, help='Directory reports are written into (optional)')
+argsParse.add_argument('-verbose',  action='store_true',   dest='verbose',    default=False,             required=False, help='Enables verbose messaging for debug purposes (optional)' )
+args = argsParse.parse_args()
 
-""".format(adminName)
-
-if YesNo.answerYesNo(opening) == False:
-        serverName = input('Enter new server name:\t')
-
-if YesNo.answerYesNo(userNamePrompt) == False:
-        adminName  = input('Enter new admin name:\t')
+if (args.verbose):
+    print('Server:      {0}'.format(args.serverName))
+    print('User:        {0}'.format(args.adminName))
+    print('directory:   {0}'.format(args.directory))
+    print('verbose:     {0}'.format(args.verbose))
 
 fileTime = timeFunctions.getCurrentTime()
 #File Name
-path = '{0}-MemoryErors.log'.format(fileTime)
+path = '{0}/{1}-MemoryErors.log'.format(args.directory, fileTime)
 
 #Clear Existing file and write current time
 ucsF.writeTimeStamp(path)
 
-url = 'https://{0}/nuova'.format(serverName)
+url = 'https://{0}/nuova'.format(args.serverName)
 #data = '<aaaLogin inName="ucs-fedlab-ad1\srehling" inPassword="{0}" />'.format(getpass.getpass())
 
-data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(adminName, getpass.getpass())
+data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(args.adminName, getpass.getpass())
 
 # Get a cookie. We use this for all further communcations with the server. 
 authCookie =  URL.getCookie(url, data)
