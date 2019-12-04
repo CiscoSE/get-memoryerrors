@@ -2,8 +2,16 @@ This script was written for python 3.6 and is untested on other versions.
 
 You must install the requests package for this script to run.
 
-To run the script, run python3 ./get-memoryStats.py
+	pip3 install requests
 
-You will prompted for the IP of a UCS domain, and the user name and password. 
+Examples
+Get memory from 10.1.1.1 using the admin account:
+
+	python3 get-MemoryStats.py --server 10.1.1.1 --user admin
+
+You will prompted for the password. 
+
 All DIMMS are listed, but statistics only are displayed if errors are found.
+
+By default reports are written to the ./reports directory. 
 
