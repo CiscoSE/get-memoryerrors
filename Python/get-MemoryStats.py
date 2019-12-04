@@ -81,7 +81,7 @@ if systemType == 'stand-alone':
 elif systemType == 'cluster':
     #Get all rack units
     if (args.verbose):
-        print('System Type: Cluster'
+        print('System Type: Cluster')
     for Line in ucsF.getUnit(authCookie, url, "computeRackUnit"):
         print("Unit:        {0}".format(Line))
         ucsF.writeCompute(Line, path)
