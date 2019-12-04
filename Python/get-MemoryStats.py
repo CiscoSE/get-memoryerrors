@@ -29,7 +29,6 @@ from ucsmRoutine import ucsFunctions
 
 timeFunctions   = timeFunctions()
 ucsF 	        = ucsFunctions()
-ucsC            = ucsCFunctions()
 URL             = urlFunctions()
 YesNo           = inputSupport()
 
