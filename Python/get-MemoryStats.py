@@ -12,7 +12,7 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20191202.1"
+__Version__    = "20191204.2"
 
 
 import getpass
@@ -26,7 +26,6 @@ from common      import inputSupport
 from common      import timeFunctions
 from common      import urlFunctions
 from ucsmRoutine import ucsFunctions
-from CRoutine    import ucsCFunctions
 
 timeFunctions   = timeFunctions()
 ucsF 	        = ucsFunctions()
@@ -45,10 +44,10 @@ Memory statistics are only provided if errors are found.
 '''
 
 argsParse = argparse.ArgumentParser(description=helpmsg)
-argsParse.add_argument('-server',   action='store',        dest='serverName', default=defaultServerName, required=False,  help='Cluster IP for UCS Manager')
-argsParse.add_argument('-user',     action='store',        dest='adminName',  default=defaultAdminName,  required=False,  help='User name to access UCS Manager')
-argsParse.add_argument('-d',        action='store',        dest='directory',  default='./reports',       required=False, help='Directory reports are written into (optional)')
-argsParse.add_argument('-verbose',  action='store_true',   dest='verbose',    default=False,             required=False, help='Enables verbose messaging for debug purposes (optional)' )
+argsParse.add_argument('--server',   action='store',        dest='serverName', default=defaultServerName, required=False,  help='Cluster IP for UCS Manager')
+argsParse.add_argument('--user',     action='store',        dest='adminName',  default=defaultAdminName,  required=False,  help='User name to access UCS Manager')
+argsParse.add_argument('-d',        action='store',         dest='directory',  default='./reports',       required=False,  help='Directory reports are written into (optional)')
+argsParse.add_argument('--verbose',  action='store_true',   dest='verbose',    default=False,             required=False,  help='Enables verbose messaging for debug purposes (optional)' )
 args = argsParse.parse_args()
 
 if (args.verbose):
@@ -59,27 +58,27 @@ if (args.verbose):
 
 fileTime = timeFunctions.getCurrentTime()
 #File Name
-path = '{0}/{1}-MemoryErors.log'.format(args.directory, fileTime)
+path = '{0}/{1}-MemoryErrors.log'.format(args.directory, fileTime)
+if (args.verbose):
+    print("File Path:   {0}".format(path))
 
-#Clear Existing file and write current time
-ucsF.writeTimeStamp(path)
-
+# URL used for access to UCS. UCS uses a single URL for everything until RedFish matures.
 url = 'https://{0}/nuova'.format(args.serverName)
-#data = '<aaaLogin inName="ucs-fedlab-ad1\srehling" inPassword="{0}" />'.format(getpass.getpass())
+if (args.verbose):
+    print("URL:     {0}".format(url))
 
+# This line is used for authentication. We don't reprint it in verbose to protect the password. 
 data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(args.adminName, getpass.getpass())
 
 # Get a cookie. We use this for all further communcations with the server. 
 authCookie =  URL.getCookie(url, data)
+if (args.verbose):
+    print("Cookie:  {0}".format(authCookie))
 
 systemType = URL.getTopInfo(url, authCookie)
 if systemType == 'stand-alone':
     print("Stand-Alone Support not yet implemented in this version")
     #We can only get inventory on stand alone servers.
-    #Line = ucsC.getServerModel(url, authCookie)
-    #ucsF.writeCompute(Line, path)
-    #ucsF.returnData("{0}","\nOnly memory modules can be returned on Stand-Alone C series.\n", path)
-    #ucsC.getMemory (authCookie, url, Line['dn'], path)
 elif systemType == 'cluster':
     #Get all rack units
     for Line in ucsF.getUnit(authCookie, url, "computeRackUnit"):
