@@ -83,7 +83,7 @@ elif systemType == 'cluster':
     if (args.verbose):
         print('System Type: Cluster')
     for Line in ucsF.getUnit(authCookie, url, "computeRackUnit"):
-        print("Unit:        {0}".format(Line))
+        print("\n\nUnit:        {0}".format(Line))
         ucsF.writeCompute(Line, path)
         ucsF.getMemory (authCookie, url, Line['dn'], path)
     #Get all blade servers
