@@ -64,7 +64,7 @@ if (args.verbose):
 # URL used for access to UCS. UCS uses a single URL for everything until RedFish matures.
 url = 'https://{0}/nuova'.format(args.serverName)
 if (args.verbose):
-    print("URL:     {0}".format(url))
+    print("URL:         {0}".format(url))
 
 # This line is used for authentication. We don't reprint it in verbose to protect the password. 
 data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(args.adminName, getpass.getpass())
@@ -72,7 +72,7 @@ data = '<aaaLogin inName="{0}" inPassword="{1}" />'.format(args.adminName, getpa
 # Get a cookie. We use this for all further communcations with the server. 
 authCookie =  URL.getCookie(url, data)
 if (args.verbose):
-    print("Cookie:  {0}".format(authCookie))
+    print("Cookie:      {0}".format(authCookie))
 
 systemType = URL.getTopInfo(url, authCookie)
 if systemType == 'stand-alone':
@@ -80,7 +80,10 @@ if systemType == 'stand-alone':
     #We can only get inventory on stand alone servers.
 elif systemType == 'cluster':
     #Get all rack units
+    if (args.verbose):
+        print('System Type: Cluster'
     for Line in ucsF.getUnit(authCookie, url, "computeRackUnit"):
+        print("Unit:        {0}".format(Line))
         ucsF.writeCompute(Line, path)
         ucsF.getMemory (authCookie, url, Line['dn'], path)
     #Get all blade servers
