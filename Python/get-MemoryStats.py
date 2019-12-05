@@ -26,9 +26,6 @@ from common      import timeFunctions
 from common      import urlFunctions
 from ucsmRoutine import ucsFunctions
 
-timeFunctions   = timeFunctions()
-ucsF 	        = ucsFunctions()
-URL             = urlFunctions()
 
 defaultAdminName  = 'admin'
 defaultServerName = 'Put your UCS Manager IP here'
@@ -54,6 +51,11 @@ if (args.verbose):
     print('{0}User:        {1}\033[0m'.format(green, args.adminName))
     print('{0}directory:   {1}\033[0m'.format(green, args.directory))
     print('{0}verbose:     {1}\033[0m'.format(green, args.verbose))
+
+#Create objects for class handling
+timeFunctions   = timeFunctions()
+ucsF 	        = ucsFunctions(args) # We pass args to init to ensure we can identify verbose
+URL             = urlFunctions()
 
 fileTime = timeFunctions.getCurrentTime()
 #File Name

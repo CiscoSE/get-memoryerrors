@@ -20,9 +20,11 @@ import time
 from common import urlFunctions
 URL = urlFunctions()
 
-
+red = '\033[40m'
+green = '\033[32m'
 class ucsFunctions:
-    def __init__(self):
+    def __init__(self,args):
+        self.args = args
         return
 
     def getUnit (self, authCookie, url, location):
@@ -30,6 +32,8 @@ class ucsFunctions:
         queryXML = '<configScope dn="sys" cookie="{0}" inClass="{1}" inHierarchical="false" inRecursive="false"> <inFilter></inFilter> </configScope>'.format(authCookie, location )
         ucsRackMountsRaw = URL.getData(url, queryXML)
         ucsRackMounts = XML.parseString(ucsRackMountsRaw).getElementsByTagName(location)
+        if (self.args.verbose):
+            print('{0}{1}'.format(red, ucsRackMounts))
         for ucsRackMount in ucsRackMounts:
             result = {}
             result['serial'] = (ucsRackMount.attributes['serial'].value)
