@@ -12,7 +12,7 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20191202.1"
+__Version__    = "20191205.3"
 import requests
 import ssl
 import time
@@ -22,21 +22,6 @@ import xml.dom.minidom as XML
 #Required for self signed certificate handling.
 from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-
-class inputSupport:
-    def __init__(self):
-        return
-
-    def answerYesNo(self, message):
-        questionExit = True
-        while questionExit == True:
-            os.system('clear')
-            print (message + "[Yes / No]")
-            newServerName = input().lower()
-            if newServerName in ['yes', 'y', 'ye']:
-                return True
-            elif newServerName in ['no','n']:
-                return False
 
 class timeFunctions:
     def __init__(self):

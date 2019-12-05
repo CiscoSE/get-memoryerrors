@@ -12,7 +12,7 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20191204.2"
+__Version__    = "20191205.3"
 
 
 import getpass
@@ -30,7 +30,6 @@ from ucsmRoutine import ucsFunctions
 timeFunctions   = timeFunctions()
 ucsF 	        = ucsFunctions()
 URL             = urlFunctions()
-YesNo           = inputSupport()
 
 defaultAdminName  = 'admin'
 defaultServerName = 'Put your UCS Manager IP here'
