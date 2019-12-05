@@ -32,10 +32,9 @@ class ucsFunctions:
         queryXML = '<configScope dn="sys" cookie="{0}" inClass="{1}" inHierarchical="false" inRecursive="false"> <inFilter></inFilter> </configScope>'.format(authCookie, location )
         ucsRackMountsRaw = URL.getData(url, queryXML)
         ucsRackMounts = XML.parseString(ucsRackMountsRaw).getElementsByTagName(location)
-        print("{0}{1}".format(red, self.args))
-        if (self.args.verbose):
-            print('{0}{1}'.format(red, ucsRackMounts))
         for ucsRackMount in ucsRackMounts:
+            if (self.args.verbose):
+                print("{0}{1}".format(red, ucsRackMount))
             result = {}
             result['serial'] = (ucsRackMount.attributes['serial'].value)
             result['model']  = (ucsRackMount.attributes['model' ].value)
