@@ -22,7 +22,6 @@ import argparse
 
 sys.path.append(os.getcwd()+'/bin')
 
-from common      import inputSupport
 from common      import timeFunctions
 from common      import urlFunctions
 from ucsmRoutine import ucsFunctions
