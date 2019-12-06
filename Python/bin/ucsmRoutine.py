@@ -34,7 +34,8 @@ class ucsFunctions:
         ucsRackMounts = XML.parseString(ucsRackMountsRaw).getElementsByTagName(location)
         for ucsRackMount in ucsRackMounts:
             if (self.args.verbose):
-                print("{0}{1}".format(red, ucsRackMount))
+                print("{0}{1}".format(red, ucsRackMount.attributes))
+                quit()
             result = {}
             result['serial'] = (ucsRackMount.attributes['serial'].value)
             result['model']  = (ucsRackMount.attributes['model' ].value)
