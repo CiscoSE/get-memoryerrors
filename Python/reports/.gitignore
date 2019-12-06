@@ -1,3 +1,7 @@
+<<<<<<< HEAD
 # Ignore everything in this directory
 *
 !.gitignore
+=======
+*.log
+>>>>>>> caa987545763e3f1795ac2e089cf1c16df0f9e47

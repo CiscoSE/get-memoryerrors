@@ -12,7 +12,7 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20191205.3"
+__Version__    = "20191206.01"
 
 
 import getpass
