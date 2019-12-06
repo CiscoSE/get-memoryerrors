@@ -11,7 +11,8 @@ writing, software distributed under the License is distributed on an "AS
 IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
-__Version__    = "20151007.03.2"
+__Version__    = "20191206.01"
+"
 
 import xml.dom.minidom as XML
 import re as regex
