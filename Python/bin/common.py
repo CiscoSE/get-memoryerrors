@@ -19,6 +19,12 @@ import time
 import os
 import xml.dom.minidom as XML
 
+red =   '\033[31m'
+green = '\033[32m'
+blue =  '\033[34m'
+reset = '\033[0m]'
+sepLine = '#' * 20
+
 #Required for self signed certificate handling.
 from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -31,13 +37,19 @@ class timeFunctions:
         return time.strftime("%Y%m%d%H%M%S")
 
 class urlFunctions:
-    def __init__(self):
+    def __init__(self, args):
+        self.args = args
         return
     def getData(self, url, data):
         headers = {"Content-Type": "text/xml"}
         request = requests.post(url, data=data, headers=headers, verify=False)
-        #request = urllib3.Request(url, data, {"Content-Type": "text/xml"})
-        #response = urllib3.urlopen(request)
+        if (self.args.verbose >= 3):
+            print("     {0}{1} Begin Request {1}\n".format(blue,sepLine))
+            print("     {0}url:      {1}".format(red,headers))
+            print("     {0}Headers:  {1}".format(red,url))
+            print("     {0}Data:     {1}".format(red,data))
+            print("     {0}Response: {1}".format(red,request.text))
+            print("     {0}{1} End Request {1}{2}\n".format(blue,sepLine,reset))
         return (request.text)
 
     def getCookie(self, url, data):

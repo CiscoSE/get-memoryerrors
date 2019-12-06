@@ -11,31 +11,34 @@ writing, software distributed under the License is distributed on an "AS
 IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
-__Version__    = "20151007.03.2"
+__Version__    = "20191205.3"
 
 import xml.dom.minidom as XML
 import re as regex
 import time
 
 from common import urlFunctions
-URL = urlFunctions()
 
-red = '\033[40m'
+red = '\033[31m'
 green = '\033[32m'
+
 class ucsFunctions:
     def __init__(self,args):
         self.args = args
+        self.noPrintAttributes = ["fsmFlags"]
+        self.URL = urlFunctions(self.args)
         return
 
     def getUnit (self, authCookie, url, location):
         FinalList = []
         queryXML = '<configScope dn="sys" cookie="{0}" inClass="{1}" inHierarchical="false" inRecursive="false"> <inFilter></inFilter> </configScope>'.format(authCookie, location )
-        ucsRackMountsRaw = URL.getData(url, queryXML)
+        ucsRackMountsRaw = self.URL.getData(url, queryXML)
         ucsRackMounts = XML.parseString(ucsRackMountsRaw).getElementsByTagName(location)
         for ucsRackMount in ucsRackMounts:
-            if (self.args.verbose):
-                print("{0}{1}".format(red, ucsRackMount.attributes))
-                quit()
+            if (self.args.verbose >= 3):
+                for attribute in ucsRackMount.attributes.items():
+                    if (attribute[0] not in self.noPrintAttributes):
+                        print("     {0}{1}:  {2}".format(red, attribute[0], attribute[1]))
             result = {}
             result['serial'] = (ucsRackMount.attributes['serial'].value)
             result['model']  = (ucsRackMount.attributes['model' ].value)
@@ -46,7 +49,7 @@ class ucsFunctions:
     def getMemory (self,authCookie, url, targetDN, path):
         FullMemoryList = []
         queryXML = '<configResolveChildren cookie="{0}" inDn="{1}" inHierarchical="true"></configResolveChildren>'.format(authCookie, targetDN)
-        ucsMemoryRaw = URL.getData(url, queryXML)
+        ucsMemoryRaw = self.URL.getData(url, queryXML)
         ucsMemory = sorted(XML.parseString(ucsMemoryRaw).getElementsByTagName('memoryUnit'), key=lambda x: str(x.attributes['location'].value))
         for module in ucsMemory:
             self.writeModule(module, path)
