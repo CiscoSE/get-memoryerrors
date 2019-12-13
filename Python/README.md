@@ -9,7 +9,7 @@ The following options are available when running this script.
 -u or --user        The user name for access to UCS Manager (Default is Admin)\
 -d or --directory   The directory for writing error and serial number information\
 >                   By default these are written to ./reports
--v or --verbose     Verbose logging can be enabled\
+-v or --verbose     Verbose logging can be enabled
 >                   -v output of arguments passed, and minor details about blades and rack mounts
 >                   -vv Output reserved for future development not currently implemented
 >                   -vvv Output includes all XML to and from the UCS including passwords in clear text
@@ -22,7 +22,7 @@ Show only errors and memory serial numbers and use the default directory. This i
     python3 get-MemoryStats.py -s 1.1.1.1 -u admin
 
 To add basic verbose output including validation of arguments passed and blade / chassis numbering (green text output)
-    python3 get-MemoryStats.py -s 1.1.1.1 -u admin -v 
+>    python3 get-MemoryStats.py -s 1.1.1.1 -u admin -v 
     
 
 By default reports are written to the ./reports directory. 
