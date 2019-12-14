@@ -12,7 +12,7 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 """
 
-__Version__    = "20191206.01"
+__Version__    = "20191214.01"
 
 
 import getpass
@@ -88,12 +88,14 @@ elif systemType == 'cluster':
     if (args.verbose >= 1):
         print('{0}System Type: Cluster\033[0m'.format(green))
     for Line in ucsF.getUnit(authCookie, url, "computeRackUnit"):
-        print("\n\n{0}Unit:        {1}\033[0m".format(green, Line))
+        if (args.verbose >= 1):
+            print("\n\n{0}Unit:        {1}\033[0m".format(green, Line))
         ucsF.writeCompute(Line, path)
         ucsF.getMemory (authCookie, url, Line['dn'], path)
     #Get all blade servers
     for Line in ucsF.getUnit(authCookie, url, "computeBlade"):
-        print("\n\n{0}Unit:        {1}\033[0m".format(green, Line))
+        if (args.verbose >= 1):
+            print("\n\n{0}Unit:        {1}\033[0m".format(green, Line))
         ucsF.writeCompute(Line, path)
         ucsF.getMemory (authCookie, url, Line['dn'], path)
 #Clean up cookie when script exits normally.
