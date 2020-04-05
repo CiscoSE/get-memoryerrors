@@ -13,6 +13,9 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 #>
 [cmdletbinding()]
+param(
+    [parameter(mandatory=$true)][array]$DomainList
+)
 $output = ""
 #Get Date and time for output file time stamp.
 $datetime = get-date -format yyyyMMdd-HHmmss
@@ -25,8 +28,73 @@ $ErrorActionPreference = "SilentlyContinue"
 #TODO Get a list of blades
 #TODO GEt a list of RACK Mount Servers
 
-[array]$DomainList = "1.1.42.110"
+#We are creating this as an array so we can collect data from more then one.
 
-function getBladeHardware {
-
+function validePowerTool {
+    Param()
+    Begin {
+        Write-Verbose "We need Cisco PowerTool to function. Checking for it now."
+    }
+    Process{
+        $modules = get-Module -ListAvailable -Name Cisco.UCSManager
+        If ($Modules.count -eq "1") {
+            Write-Verbose "Powertool Available"
+            return $true
+        else
+            write-verbose "Powertool Not available"
+            return $false
+        }
+    end {
+    }
+    }
 }
+
+
+Function toolLoadCheck {
+    param()
+    #These modules need to be loaded to move on.
+    $modules = get-module
+    if ("Cisco.Ucs.Core" -in $modules.name -and "Cisco.UCSManager" -in $modules.name){
+        write-verbose "Modules are loaded"
+        return $true
+    }
+    else{
+        write-host "Modules did not load. "}
+        return $false
+}
+
+
+
+function main {
+    param(
+        [parameter(mandatory=$true)][string]$targetHost
+    )
+    begin{
+        write-verbose "Processing $targetHost"
+    }
+    process{
+        #Load PowerShell Modules if needed.
+        if (-not (toolLoadCheck)){
+            get-module -ListAvailable -name Cisco.UCSManager | import-module -verbose:$false 
+            if (-not (toolLoadCheck)){
+                write-Host "Failed to load tools, script cannot continue"
+                exit
+            }
+        }
+    $ucsConnection = connect-ucs -name $targetHost
+        #TODO Password Handling
+        #TODO Does the name look like an IP or a dns name?
+    }
+}
+
+if (validePowerTool) {
+    $DomainList | %{
+        
+        main -targetHost $_
+    }
+}
+else {
+    Write-verbose "PowerTool Modules are required for this script. Please obtain them from software.cisco.com"
+}
+
+#TODO Recheck failure of UCS Modules to load.
