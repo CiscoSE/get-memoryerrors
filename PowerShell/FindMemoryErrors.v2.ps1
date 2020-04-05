@@ -12,7 +12,7 @@ writing, software distributed under the License is distributed on an "AS
 IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 #>
-
+[cdmletbinding()]
 $output = ""
 #Get Date and time for output file time stamp.
 $datetime = get-date -format yyyyMMdd-HHmmss
@@ -20,5 +20,13 @@ $FileName = "$($datetime)-MemoryReport.txt"
 
 #If you have bad blade, this ensures the script doesn't fail. 
 $ErrorActionPreference = "SilentlyContinue"
-#Get a list of servers we want to loop through
-$HardwareList = Get-UcsServer
+
+#TODO Establish Connection
+#TODO Get a list of blades
+#TODO GEt a list of RACK Mount Servers
+
+[array]DomainList = "1.1.42.110"
+
+function getBladeHardware {
+
+}
