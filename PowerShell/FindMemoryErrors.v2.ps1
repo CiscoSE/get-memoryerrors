@@ -15,7 +15,10 @@ or implied.
 [cmdletbinding()]
 param(
     [parameter(mandatory=$true)][array]$DomainList,
-    [parameter(mandatory=$false)][pscredential]$Gobal:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password.")
+    [parameter(mandatory=$false)][pscredential]$Gobal:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password."),
+    [parameter(mandatory=$false)][string]$Global:ProcessingLogName = "$(get-date -Format yyyyMMdd-HHmmss-processing.log)",
+    [parameter(mandatory=$false)][string]$Global:ProcessingLogPath = './Processing',
+    [parameter(mandatory=$false)][string]$Global:TACReportPath = './' + (get-date -Format yyyyMMdd-HHmmss) + '-TACReport'
 )
 
 if (-not ($Credentials)){
@@ -38,18 +41,64 @@ $ErrorActionPreference = "Continue"
 
 #We are creating this as an array so we can collect data from more then one.
 
+function Write-Event{
+    param(
+        [parameter(mandatory=$false,position=0)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+            [string]$type = "INFO",
+        [parameter(mandatory=$true,Position=1)][string]$message
+    )
+    switch($type){
+    "INFO" {$Color = "Green";  break}
+    "FAIL" {$Color = "RED";    break}
+    "WARN" {$Color = "Yellow"; break}
+    }
+    write-host " [ " -NoNewline
+    write-host $type -ForegroundColor $color -NoNewline
+    write-host " ]     " -NoNewline
+    write-host $message
+    if ($type -eq "FAIL") {
+        exit
+    }
+} 
+
+function validateDirectory {
+    param(
+        [parameter(mandatory=$true)][string]$Directory
+    )
+    begin {
+        Write-Event -type INFO -message "checking $Directory Exists"
+    }
+    process{
+        $error.clear()
+        if ( -not (test-path $directory)){
+            $result = md $directory
+            if ($error[0]){
+                Write-Event -type WARN -message "Directory $Directory does not exist and could not be created"
+                Write-Event -type FAIL -message "Directory $Directory must be created and writable to continue."
+            }
+            else{
+                Write-Event -type INFO -message "Directory $Directory created"
+            }
+        }
+        else{
+            Write-Event -type INFO -message "$Directory Directory Exists"
+        }
+    }
+}
+
 function validePowerTool {
     Param()
     Begin {
-        Write-Verbose "We need Cisco PowerTool to function. Checking for it now."
+        write-verbose "We need Cisco PowerTool to function. Checking for it now."
     }
     Process{
         $modules = get-Module -ListAvailable -Name Cisco.UCSManager
         If ($Modules.count -eq "1") {
-            Write-Verbose "Powertool Available"
+            Write-Event -message "Powertool Available"
             return $true
         else
-            write-verbose "Powertool Not available"
+            Write-Event -message "Powertool Not available"
             return $false
         }
     end {
@@ -63,32 +112,14 @@ Function toolLoadCheck {
     #These modules need to be loaded to move on.
     $modules = get-module
     if ("Cisco.Ucs.Core" -in $modules.name -and "Cisco.UCSManager" -in $modules.name){
-        write-verbose "Modules are loaded"
+        Write-Event -type INFO -message "`tModules are loaded"
         return $true
     }
     else{
-        write-host "Modules did not load. "
+        write-Event -type "WARN" -message "`tModules did not load. "
         return $false
     }
 }
-
-function write-event{
-    param(
-        [parameter(mandatory=$true)][string]$message,
-        [parameter(mandatory=$false)]
-            [ValidatePattern("INFO|FAIL|WARN")]
-            [string]$type = "INFO"
-    )
-    switch($type){
-    "INFO" {$Color = "Green";  break}
-    "FAIL" {$Color = "RED";    break}
-    "WARN" {$Color = "Yellow"; break}
-    }
-    write-host " [ " -NoNewline
-    write-host $type -ForegroundColor Green -NoNewline
-    write-host " ]     " -NoNewline
-    write-host $message
-} 
 
 
 function main {
@@ -96,28 +127,39 @@ function main {
         [parameter(mandatory=$true)][string]$targetHost
     )
     begin{
-        write-verbose "Processing $targetHost"
+        Write-Event -type INFO -message "Processing $targetHost"
     }
     process{
+        $DomainReport = @{}
         #Load PowerShell Modules if needed.
         if (-not (toolLoadCheck)){
             get-module -ListAvailable -name Cisco.UCSManager | import-module -verbose:$false 
             if (-not (toolLoadCheck)){
-                write-Host "Failed to load tools, script cannot continue"
-                exit
+                write-Event -type FAIL -message "Failed to load tools, script cannot continue"
             }
         }
         $ucsConnection = connect-ucs -name $targetHost -Credential $Credentials
         if ($ucsConnection){
-            write-event -type INFO -message "Connected to $targetHost"
+            write-event -type INFO -message "`tConnected to $targetHost"
+            $DomainReport['Version'] = $ucsConnection.Version
+            $DomainReport['DomainName'] = $ucsConnection.Name
+            $DomainReport
         }
         else{
-            write-event -type WARN -message "Failed to connect to $targetHost. This domain is not processed"
-            write-event -type WARN -message $error[0].Exception
+            write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
+            write-event -type WARN -message "`t$($error[0].Exception)"
         }
 
+
+        if ($ucsConnection) { 
+            $disconnect = (disconnect-ucs)
+            write-Event -type INFO -message "`tDisconnecting from $targetHost"
+        }
     }
 }
+
+validateDirectory -Directory $ProcessingLogPath
+validateDirectory -Directory $TACReportPath
 
 if (validePowerTool) {
     $DomainList | %{
