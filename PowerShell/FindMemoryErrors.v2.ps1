@@ -143,7 +143,15 @@ function main {
             write-event -type INFO -message "`tConnected to $targetHost"
             $DomainReport['Version'] = $ucsConnection.Version
             $DomainReport['DomainName'] = $ucsConnection.Name
-            $DomainReport
+            $serverList = Get-UcsServer
+            $serverList | 
+                %{
+                    $thisServerReport += $_ | 
+                        select Serial, Model, TotalMemory, availableMemory, MemorySpeed, dn |
+                                ConvertTo-Html -As List -Fragment -PreContent "<h2>Server Report for $($_.Serial)</h2>"
+                    #TODO Write Memory Report 
+                } 
+             
         }
         else{
             write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
