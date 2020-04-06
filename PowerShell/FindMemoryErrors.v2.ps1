@@ -151,7 +151,8 @@ function main {
                                 ConvertTo-Html -As List -Fragment -PreContent "<h2>Server Report for $($_.Serial)</h2>"
                     #TODO Write Memory Report 
                 } 
-             
+            ConvertTo-Html -Title "Test Report" -PreContent "Server Report" -PostContent $thisServerReport |
+                out-file ($TACReportPath + "TacReport.html")
         }
         else{
             write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
