@@ -14,15 +14,23 @@ or implied.
 #>
 [cmdletbinding()]
 param(
-    [parameter(mandatory=$true)][array]$DomainList
+    [parameter(mandatory=$true)][array]$DomainList,
+    [parameter(mandatory=$false)][pscredential]$Gobal:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password.")
 )
+
+if (-not ($Credentials)){
+    write-host "Credentials required. Script will exit."
+    exit
+}
+
+
 $output = ""
 #Get Date and time for output file time stamp.
 $datetime = get-date -format yyyyMMdd-HHmmss
 $FileName = "$($datetime)-MemoryReport.txt"
 
 #If you have bad blade, this ensures the script doesn't fail. 
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Continue"
 
 #TODO Establish Connection
 #TODO Get a list of blades
@@ -59,10 +67,28 @@ Function toolLoadCheck {
         return $true
     }
     else{
-        write-host "Modules did not load. "}
+        write-host "Modules did not load. "
         return $false
+    }
 }
 
+function write-event{
+    param(
+        [parameter(mandatory=$true)][string]$message,
+        [parameter(mandatory=$false)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+            [string]$type = "INFO"
+    )
+    switch($type){
+    "INFO" {$Color = "Green";  break}
+    "FAIL" {$Color = "RED";    break}
+    "WARN" {$Color = "Yellow"; break}
+    }
+    write-host " [ " -NoNewline
+    write-host $type -ForegroundColor Green -NoNewline
+    write-host " ]     " -NoNewline
+    write-host $message
+} 
 
 
 function main {
@@ -81,9 +107,15 @@ function main {
                 exit
             }
         }
-    $ucsConnection = connect-ucs -name $targetHost
-        #TODO Password Handling
-        #TODO Does the name look like an IP or a dns name?
+        $ucsConnection = connect-ucs -name $targetHost -Credential $Credentials
+        if ($ucsConnection){
+            write-event -type INFO -message "Connected to $targetHost"
+        }
+        else{
+            write-event -type WARN -message "Failed to connect to $targetHost. This domain is not processed"
+            write-event -type WARN -message $error[0].Exception
+        }
+
     }
 }
 
