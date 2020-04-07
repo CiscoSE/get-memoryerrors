@@ -15,43 +15,42 @@ or implied.
 [cmdletbinding()]
 param(
     [parameter(mandatory=$true)][array]$DomainList,
-    [parameter(mandatory=$false)][pscredential]$Gobal:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password."),
-    [parameter(mandatory=$false)][string]$Global:ProcessingLogName = "$(get-date -Format yyyyMMdd-HHmmss-processing.log)",
-    [parameter(mandatory=$false)][string]$Global:ProcessingLogPath = './Processing',
-    [parameter(mandatory=$false)][string]$Global:TACReportPath = './' + (get-date -Format yyyyMMdd-HHmmss) + '-TACReport'
+    [parameter(mandatory=$false)][pscredential]$Global:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password."),
+    [parameter(mandatory=$false)][string]$ProcessingLogName,
+    [parameter(mandatory=$false)][string]$ProcessingLogPath = '.\Processing',
+    [parameter(mandatory=$false)][string]$TACReportPath = '.\TACReport'
 )
 
-if (-not ($Credentials)){
+if (-not ($Global:Credentials)){
     write-host "Credentials required. Script will exit."
     exit
 }
 
-
+$Global:ListOfReports = @{}
 $output = ""
 #Get Date and time for output file time stamp.
 $datetime = get-date -format yyyyMMdd-HHmmss
 $FileName = "$($datetime)-MemoryReport.txt"
 
 #If you have bad blade, this ensures the script doesn't fail. 
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop" # Other Options: "Continue" "SilentlyContinue
 
 #TODO Establish Connection
 #TODO Get a list of blades
 #TODO GEt a list of RACK Mount Servers
 
-#We are creating this as an array so we can collect data from more then one.
 
-function Write-Event{
+function write-screen {
     param(
         [parameter(mandatory=$false,position=0)]
             [ValidatePattern("INFO|FAIL|WARN")]
-            [string]$type = "INFO",
+                                               [string]$type = "INFO",
         [parameter(mandatory=$true,Position=1)][string]$message
-    )
+     )
     switch($type){
-    "INFO" {$Color = "Green";  break}
-    "FAIL" {$Color = "RED";    break}
-    "WARN" {$Color = "Yellow"; break}
+        "INFO" {$Color = "Green";  break}
+        "FAIL" {$Color = "RED";    break}
+        "WARN" {$Color = "Yellow"; break}
     }
     write-host " [ " -NoNewline
     write-host $type -ForegroundColor $color -NoNewline
@@ -59,30 +58,87 @@ function Write-Event{
     write-host $message
     if ($type -eq "FAIL") {
         exit
+    }    
+}
+
+function Write-Event{
+    param(
+        [parameter(mandatory=$false,position=0)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+                                               [string]$type = "INFO",
+        [parameter(mandatory=$true,Position=1)][string]$message,
+        [parameter(mandatory=$false)]          [switch]$logOnly = $false #When True, we only write this data to the log file.
+    )
+
+    ("[ $type ] $message") | out-file -Append -FilePath $Global:ProcessingLogFile
+
+    if ($logOnly){
+        return
+    }
+
+    write-screen -type $type -message $message
+    if ($type -eq "FAIL") {
+        exit
     }
 } 
+
+function write-screen {
+    param(
+        [parameter(mandatory=$false,position=0)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+                                               [string]$type = "INFO",
+        [parameter(mandatory=$true,Position=1)][string]$message
+     )
+    switch($type){
+        "INFO" {$Color = "Green";  break}
+        "FAIL" {$Color = "RED";    break}
+        "WARN" {$Color = "Yellow"; break}
+    }
+    write-host " [ " -NoNewline
+    write-host $type -ForegroundColor $color -NoNewline
+    write-host " ]     " -NoNewline
+    write-host $message
+    if ($type -eq "FAIL") {
+        exit
+    }    
+}
+
+Function format-Log {
+    param(
+        $LogFilePath,
+        $LogFileName
+    )
+    if ($LogFilePath -notmatch "\$"){
+        return ($LogFilePath + "\" + $LogFileName)
+    }
+    Else{
+        return ($LogFilePath + $LogFileName)
+    
+    }
+
+}
 
 function validateDirectory {
     param(
         [parameter(mandatory=$true)][string]$Directory
     )
     begin {
-        Write-Event -type INFO -message "checking $Directory Exists"
+        write-screen -type INFO -message "Checking $Directory Exists"
     }
     process{
         $error.clear()
         if ( -not (test-path $directory)){
             $result = md $directory
             if ($error[0]){
-                Write-Event -type WARN -message "Directory $Directory does not exist and could not be created"
-                Write-Event -type FAIL -message "Directory $Directory must be created and writable to continue."
+                write-screen -type WARN -message "Directory $Directory does not exist and could not be created"
+                Write-screen -type FAIL -message "Directory $Directory must be created and writable to continue."
             }
             else{
-                Write-Event -type INFO -message "Directory $Directory created"
+                Write-screen -type INFO -message "Directory $Directory created"
             }
         }
         else{
-            Write-Event -type INFO -message "$Directory Directory Exists"
+            Write-Screen -type INFO -message "$Directory Directory Exists"
         }
     }
 }
@@ -122,6 +178,85 @@ Function toolLoadCheck {
 }
 
 
+function process-MemoryStats {
+    param (
+        [parameter(mandatory=$true)]$MemoryStats,
+        [parameter(mandatory=$true)]$MemoryProperties
+    )
+    begin{
+        write-event -type INFO -message "`t`t`tProcessing Server Memory Statistics for $($MemoryProperties.Location)"
+        # We write all results to the logs, but only DIMMs that show errrors should go into the TAC report.
+    }
+    process{
+        #All of the memory attributes written to the log. 
+        $errorFound = $false
+        $MemoryStatReport = @()
+        
+        $MemoryProperties |
+            select location, capacity, Clock, Type, Vendor, Serial, Model, state | 
+                ft |
+                    Out-File -FilePath $Global:ProcessingLogFile -Append 
+        $MemoryStats |
+            fl * |
+                out-file -FilePath $Global:ProcessingLogFile -Append
+        
+        foreach ($Attribute in ($MemoryStats | get-member | ?{$_.name -match "error"}).name){
+            if (($MemoryStats).($Attribute) -ne 0){
+                $memoryStatReport += ($MemoryStats | select $Attribute | convertto-html -As list -Fragment -Property $attribute)
+                Write-Event -type WARN -message "`t`t`t$($Attribute):`t$($MemoryStats.($attribute))"
+                $errorFound = $true
+            }
+        }
+        return $ErrorFound, ($MemoryStatReport)
+    }
+    end{}
+}
+
+function Process-BaseServer {
+    Param (
+        [parameter(mandatory=$true)]$ServerProperties,
+        [parameter(mandatory=$true)]$ServerFirmware
+    )
+    begin{Write-Event -type INFO -message "`t`tProcessing $($ServerProperties.Serial)"}
+    process{
+       $report = $ServerProperties | 
+        Select `
+            Serial, 
+            Model, 
+            ServerID, 
+            TotalMemory, 
+            AvailableMemory, 
+            MemorySpeed, 
+            Ucs, 
+            NumOfCores, 
+            NumOfCPUs, 
+            AdminState,  
+            Lc,
+            @{Name="BiosVersion"; Expression={($ServerFirmware | ?{$_.type -match 'bios'})[0].version}},
+            @{Name="CIMCVersion"; Expression={($ServerFirmware | ?{$_.type -match "(blade|rack)-controller" -and $_.deployment -match 'system'})[0].version}},
+            @{Name="BoardControllerVersion"; Expression={($ServerFirmware | ?{$_.type -match "board-controller" -and $_.deployment -match 'system'})[0].version}}
+       # Process HTML Output.
+       $report | Select `
+            Serial, 
+            Model, 
+            ServerID, 
+            TotalMemory, 
+            AvailableMemory, 
+            MemorySpeed, 
+            NumOfCores, 
+            NumOfCPUs, 
+            AdminState,  
+            Lc,
+            BiosVersion,
+            CIMCVersion,
+            BoardControllerVersion | 
+                fl|  
+                    out-file -Append -FilePath $Global:ProcessingLogFile 
+       Return ($report | convertto-html -As List -Fragment -PreContent "<h1>System Report</h1>")
+   }
+    
+}
+
 function main {
     param(
         [parameter(mandatory=$true)][string]$targetHost
@@ -138,21 +273,37 @@ function main {
                 write-Event -type FAIL -message "Failed to load tools, script cannot continue"
             }
         }
+        #Connect to UCS
         $ucsConnection = connect-ucs -name $targetHost -Credential $Credentials
         if ($ucsConnection){
             write-event -type INFO -message "`tConnected to $targetHost"
-            $DomainReport['Version'] = $ucsConnection.Version
-            $DomainReport['DomainName'] = $ucsConnection.Name
+            
+            #Process list of servers (Includes Rackmount and Blade Servers.
             $serverList = Get-UcsServer
+            
             $serverList | 
                 %{
-                    $thisServerReport += $_ | 
-                        select Serial, Model, TotalMemory, availableMemory, MemorySpeed, dn |
-                                ConvertTo-Html -As List -Fragment -PreContent "<h2>Server Report for $($_.Serial)</h2>"
-                    #TODO Write Memory Report 
-                } 
-            ConvertTo-Html -Title "Test Report" -PreContent "Server Report" -PostContent $thisServerReport |
-                out-file ($TACReportPath + "TacReport.html")
+                    $ServerErrorCount = 0
+                    if ($ServerReport){remove-variable ServerReport}
+                    $ServerProperties =  (process-BaseServer -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
+                    $ServerReport += $ServerProperties
+                    $memoryList = ($_ | Get-UCSComputeBoard | Get-UcsMemoryArray | get-ucsMemoryUnit | sort location )
+                    $memoryList | %{
+                        $MemoryStats = ($_ | Get-UcsMemoryErrorStats)
+                        if ($MemoryStats){
+                            $ErrorFound, $MemoryReport = (process-MemoryStats -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
+                        }
+                        if($errorFound) {
+                            $ServerErrorCount += 1
+                            $serverReport += $MemoryReport
+                        } 
+                    if ($serverErrorCount -gt 0) {
+                        $ServerReportCombined += $serverReport
+                    }
+                 }
+            }
+            ConvertTo-Html -Title "Test Report" -body $ServerReportCombined |
+                Out-File -FilePath $Global:TACReportFile -Append
         }
         else{
             write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
@@ -169,6 +320,16 @@ function main {
 
 validateDirectory -Directory $ProcessingLogPath
 validateDirectory -Directory $TACReportPath
+
+if (-not ($ProcessingLogName)){
+    $ProcessingLogName = ($datetime + "-Processing.log")
+}
+
+$Global:ProcessingLogFile = format-Log -LogFilePath $ProcessingLogPath -LogFileName $ProcessingLogName 
+$Global:TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport.html")
+
+write-screen -type INFO -message "Processing Log File:`t$Global:ProcessingLogFile"
+Write-Screen -type INFO -message "TAC Report File:`t$Global:TACReportFile"
 
 if (validePowerTool) {
     $DomainList | %{
