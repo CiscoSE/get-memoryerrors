@@ -33,7 +33,7 @@ $datetime = get-date -format yyyyMMdd-HHmmss
 $FileName = "$($datetime)-MemoryReport.txt"
 
 #If you have bad blade, this ensures the script doesn't fail. 
-$ErrorActionPreference = "Stop" # Other Options: "Continue" "SilentlyContinue
+$ErrorActionPreference = "SilentlyContinue" # Other Options: "Continue" "SilentlyContinue" "Stop"
 
 $Global:CSS = @"
     <Title>Memory Error TAC Report</Title>
