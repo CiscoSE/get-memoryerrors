@@ -35,9 +35,24 @@ $FileName = "$($datetime)-MemoryReport.txt"
 #If you have bad blade, this ensures the script doesn't fail. 
 $ErrorActionPreference = "Stop" # Other Options: "Continue" "SilentlyContinue
 
-#TODO Establish Connection
-#TODO Get a list of blades
-#TODO GEt a list of RACK Mount Servers
+$Global:CSS = @"
+    <Title>Memory Error TAC Report</Title>
+    <Style>
+    SrvProp{
+        boarder:20pt;
+    }
+
+    td, th { border:0px solid black; 
+         border-collapse:collapse;
+         white-space:pre; }
+    th { color:white;
+     background-color:black; }
+    table, tr, td, th { padding: 2px; margin: 0px ;white-space:pre; }
+    tr:nth-child(odd) {background-color: lightgray}
+    table { width:95%;margin-left:5px; margin-bottom:20px;}
+
+    </Style>
+"@
 
 
 function write-screen {
@@ -188,12 +203,33 @@ function process-MemoryStats {
         # We write all results to the logs, but only DIMMs that show errrors should go into the TAC report.
     }
     process{
+        $MemoryTranslation = { param($MemoryID)
+            switch ($MemoryID){
+                '0x2C00' {'Micron';  break}
+                '0x802C' {'Micron';  break}
+                '0x80AD' {'Hynix';   break}
+                '0x80CE' {'Samsung'; break}
+                '0xAD00' {'Hynix';   break}
+                '0xCE00' {'Samsung'; break}
+                Default {$_}
+            }
+        }
+        
+        $MemoryStatReport = New-Object -type psobject
         #All of the memory attributes written to the log. 
         $errorFound = $false
-        $MemoryStatReport = @()
         
-        $MemoryProperties |
-            select location, capacity, Clock, Type, Vendor, Serial, Model, state | 
+        $MemorySubProperties = $MemoryProperties |
+            select `
+                location, 
+                capacity, 
+                Clock, 
+                Type, 
+                @{Name='Vendor';Expression={&$MemoryTranslation -MemoryID $_.Vendor }},
+                Serial, 
+                Model, 
+                state
+        $MemorySubProperties|
                 ft |
                     Out-File -FilePath $Global:ProcessingLogFile -Append 
         $MemoryStats |
@@ -202,12 +238,16 @@ function process-MemoryStats {
         
         foreach ($Attribute in ($MemoryStats | get-member | ?{$_.name -match "error"}).name){
             if (($MemoryStats).($Attribute) -ne 0){
-                $memoryStatReport += ($MemoryStats | select $Attribute | convertto-html -As list -Fragment -Property $attribute)
+                $memoryStatReport | add-member -MemberType NoteProperty -Name $Attribute -value $MemoryStats.($Attribute)
                 Write-Event -type WARN -message "`t`t`t$($Attribute):`t$($MemoryStats.($attribute))"
                 $errorFound = $true
             }
         }
-        return $ErrorFound, ($MemoryStatReport)
+        if ($errorFound){
+            $MemorySubPropertiesHTML = ($MemorySubProperties | convertto-html -As table -Fragment -PreContent "<h2>Memory Properties</h2>")
+            $MemoryStatReportComplete = $MemorySubPropertiesHTML + ($MemoryStatReport | convertto-html -As Table -Fragment)
+        } 
+        return $ErrorFound, ($MemoryStatReportComplete)
     }
     end{}
 }
@@ -252,7 +292,7 @@ function Process-BaseServer {
             BoardControllerVersion | 
                 fl|  
                     out-file -Append -FilePath $Global:ProcessingLogFile 
-       Return ($report | convertto-html -As List -Fragment -PreContent "<h1>System Report</h1>")
+       Return ($report | convertto-html -As List -Fragment -PreContent "<h1>System Report</h1><SrvProp>" -PostContent "</SrvProp>")
    }
     
 }
@@ -289,6 +329,8 @@ function main {
                     $ServerReport += $ServerProperties
                     $memoryList = ($_ | Get-UCSComputeBoard | Get-UcsMemoryArray | get-ucsMemoryUnit | sort location )
                     $memoryList | %{
+                        $ErrorFound = $False
+                        if ($MemoryReport){Remove-Variable -Name MemoryReport}
                         $MemoryStats = ($_ | Get-UcsMemoryErrorStats)
                         if ($MemoryStats){
                             $ErrorFound, $MemoryReport = (process-MemoryStats -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
@@ -297,12 +339,10 @@ function main {
                             $ServerErrorCount += 1
                             $serverReport += $MemoryReport
                         } 
-                    if ($serverErrorCount -gt 0) {
-                        $ServerReportCombined += $serverReport
                     }
-                 }
-            }
-            ConvertTo-Html -Title "Test Report" -body $ServerReportCombined |
+                    if ($serverErrorCount -gt 0) {$ServerReportCombined += $serverReport}
+                }
+            ConvertTo-Html -Head $Global:CSS -body $ServerReportCombined |
                 Out-File -FilePath $Global:TACReportFile -Append
         }
         else{
