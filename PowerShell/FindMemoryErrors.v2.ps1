@@ -26,18 +26,16 @@ if (-not ($Global:Credentials)){
     exit
 }
 
-$Global:ListOfReports = @{}
-$output = ""
+$Global:InventoryReportFragments = ''
 #Get Date and time for output file time stamp.
 $datetime = get-date -format yyyyMMdd-HHmmss
-$FileName = "$($datetime)-MemoryReport.txt"
 
 #If you have bad blade, this ensures the script doesn't fail. 
 $ErrorActionPreference = "SilentlyContinue" # Other Options: "Continue" "SilentlyContinue" "Stop"
 
 $Global:CSS = @"
     <Title>Memory Error TAC Report</Title>
-    <Style>
+    <Style type='text/css'>
     SrvProp{
         boarder:20pt;
     }
@@ -299,7 +297,8 @@ function Process-BaseServer {
 
 function main {
     param(
-        [parameter(mandatory=$true)][string]$targetHost
+        [parameter(mandatory=$true)][string]$targetHost,
+        [parameter(mandatory=$True)][string]$tacReportName
     )
     begin{
         Write-Event -type INFO -message "Processing $targetHost"
@@ -317,12 +316,14 @@ function main {
         $ucsConnection = connect-ucs -name $targetHost -Credential $Credentials
         if ($ucsConnection){
             write-event -type INFO -message "`tConnected to $targetHost"
-            
+            $UCSConnection | select ucs,version | convertto-html -As Table -Fragment | out-file ($InventoryReportPath + "\" + $targetHost + '.html')
             #Process list of servers (Includes Rackmount and Blade Servers.
             $serverList = Get-UcsServer
             
             $serverList | 
                 %{
+                    $_
+                    exit
                     $ServerErrorCount = 0
                     if ($ServerReport){remove-variable ServerReport}
                     $ServerProperties =  (process-BaseServer -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
@@ -342,8 +343,6 @@ function main {
                     }
                     if ($serverErrorCount -gt 0) {$ServerReportCombined += $serverReport}
                 }
-            ConvertTo-Html -Head $Global:CSS -body $ServerReportCombined |
-                Out-File -FilePath $Global:TACReportFile -Append
         }
         else{
             write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
@@ -355,26 +354,34 @@ function main {
             $disconnect = (disconnect-ucs)
             write-Event -type INFO -message "`tDisconnecting from $targetHost"
         }
+        if ($ServerReportCombined){
+             ConvertTo-Html -Head $Global:CSS -body $ServerReportCombined |
+                Out-File -FilePath $tacReportName -Append
+        }
     }
 }
 
+$Global:InventoryReportPath = ($ProcessingLogPath + '\' + $datetime)
+
 validateDirectory -Directory $ProcessingLogPath
 validateDirectory -Directory $TACReportPath
+validateDirectory -Directory $Global:InventoryReportPath
 
 if (-not ($ProcessingLogName)){
     $ProcessingLogName = ($datetime + "-Processing.log")
 }
 
 $Global:ProcessingLogFile = format-Log -LogFilePath $ProcessingLogPath -LogFileName $ProcessingLogName 
-$Global:TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport.html")
 
 write-screen -type INFO -message "Processing Log File:`t$Global:ProcessingLogFile"
 Write-Screen -type INFO -message "TAC Report File:`t$Global:TACReportFile"
 
+$DomainCount = 1
 if (validePowerTool) {
     $DomainList | %{
-        
-        main -targetHost $_
+    $TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport-"+ $DomainCount +".html")        
+        main -targetHost $_ -tacReportName $TACReportFile
+        $DomainCount += 1
     }
 }
 else {
