@@ -194,7 +194,8 @@ Function toolLoadCheck {
 function process-MemoryStats {
     param (
         [parameter(mandatory=$true)]$MemoryStats,
-        [parameter(mandatory=$true)]$MemoryProperties
+        [parameter(mandatory=$true)]$MemoryProperties,
+        [parameter(mandatory=$true)]$InventoryPath
     )
     begin{
         write-event -type INFO -message "`t`t`tProcessing Server Memory Statistics for $($MemoryProperties.Location)"
@@ -227,9 +228,9 @@ function process-MemoryStats {
                 Serial, 
                 Model, 
                 state
-        $MemorySubProperties|
-                ft |
-                    Out-File -FilePath $Global:ProcessingLogFile -Append 
+        $MemorySubProperties |
+            ConvertTo-Html -as table -Fragment |
+                out-file -FilePath $InventoryPath -append
         $MemoryStats |
             fl * |
                 out-file -FilePath $Global:ProcessingLogFile -Append
@@ -245,6 +246,7 @@ function process-MemoryStats {
             $MemorySubPropertiesHTML = ($MemorySubProperties | convertto-html -As table -Fragment -PreContent "<h2>Memory Properties</h2>")
             $MemoryStatReportComplete = $MemorySubPropertiesHTML + ($MemoryStatReport | convertto-html -As Table -Fragment)
         } 
+        
         return $ErrorFound, ($MemoryStatReportComplete)
     }
     end{}
@@ -253,7 +255,8 @@ function process-MemoryStats {
 function Process-BaseServer {
     Param (
         [parameter(mandatory=$true)]$ServerProperties,
-        [parameter(mandatory=$true)]$ServerFirmware
+        [parameter(mandatory=$true)]$ServerFirmware,
+        [parameter(mandatory=$true)]$InventoryPath
     )
     begin{Write-Event -type INFO -message "`t`tProcessing $($ServerProperties.Serial)"}
     process{
@@ -287,13 +290,25 @@ function Process-BaseServer {
             Lc,
             BiosVersion,
             CIMCVersion,
-            BoardControllerVersion | 
-                fl|  
-                    out-file -Append -FilePath $Global:ProcessingLogFile 
-       Return ($report | convertto-html -As List -Fragment -PreContent "<h1>System Report</h1><SrvProp>" -PostContent "</SrvProp>")
+            BoardControllerVersion |  
+                convertto-html -as List -fragment -PreContent "<h1 id='$($ServerProperties.serial)' >Server Serial Number: $($ServerProperties.Serial)</h1>" |
+                    Out-File -FilePath $InventoryPath -append
+       Return ($report | convertto-html -As List -Fragment -PreContent "<h1>System Report</h1>")
    }
     
 }
+
+#function add-ServerToInventory{
+#    param(
+#        [parameter(mandatory=$true)][string]$Serial,
+#        [parameter(mandatory=$true)][string]$InventoryPath,
+#        [parameter(mandatory=$true)]$content 
+#    )
+#
+#    $content | select model, serverid, MemorySpeed, TotalMemory, AvailableMemory, NumOfCores, NumOfCpus 
+#        convertto-html -As list -Fragment -PreContent "<h2 id=$($Serial)>Server Serial: $($serial)</h2>" | 
+#            out-file -FilePath $InventoryPath -Append
+#}
 
 function main {
     param(
@@ -316,17 +331,28 @@ function main {
         $ucsConnection = connect-ucs -name $targetHost -Credential $Credentials
         if ($ucsConnection){
             write-event -type INFO -message "`tConnected to $targetHost"
-            $UCSConnection | select ucs,version | convertto-html -As Table -Fragment | out-file ($InventoryReportPath + "\" + $targetHost + '.html')
-            #Process list of servers (Includes Rackmount and Blade Servers.
             $serverList = Get-UcsServer
-            
+
+            #Create a header for our Inventory File
+
+            $ServerListHTML = $serverList | 
+                select `
+                    serial,
+                    @{Name='ServiceProfile'; Expression={($_.AssignedToDn) -replace ".+ls-",''}} | 
+                        convertto-html -as Table -fragment
+            $ServerList | %{
+                $Serial = $_.serial
+                $serverListHTML = $ServerListHTML -replace "<td>$($serial)</td>","<td><a href='#$($serial)' >$($serial)</a></td>"
+            }
+
+            $ServerListHTML | out-file -FilePath ($InventoryReportPath + "\" + $targetHost + '.html') -append
+
             $serverList | 
                 %{
-                    $_
-                    exit
+                    #add-ServerToInventory -Serial $_.serial -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -content $_
                     $ServerErrorCount = 0
                     if ($ServerReport){remove-variable ServerReport}
-                    $ServerProperties =  (process-BaseServer -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
+                    $ServerProperties =  (process-BaseServer -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
                     $ServerReport += $ServerProperties
                     $memoryList = ($_ | Get-UCSComputeBoard | Get-UcsMemoryArray | get-ucsMemoryUnit | sort location )
                     $memoryList | %{
@@ -334,7 +360,7 @@ function main {
                         if ($MemoryReport){Remove-Variable -Name MemoryReport}
                         $MemoryStats = ($_ | Get-UcsMemoryErrorStats)
                         if ($MemoryStats){
-                            $ErrorFound, $MemoryReport = (process-MemoryStats -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
+                            $ErrorFound, $MemoryReport = (process-MemoryStats -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
                         }
                         if($errorFound) {
                             $ServerErrorCount += 1
@@ -358,6 +384,8 @@ function main {
              ConvertTo-Html -Head $Global:CSS -body $ServerReportCombined |
                 Out-File -FilePath $tacReportName -Append
         }
+        $inventoryReport = get-content ($InventoryReportPath + "\" + $targetHost + '.html')
+        convertto-html -Head $Global:CSS -Body $inventoryReport | Out-File ($InventoryReportPath + "\" + $targetHost + '.html')
     }
 }
 
