@@ -3,6 +3,6 @@
     If (Test-Path -Path $_){
         $_ | 
             get-childitem |
-                Remove-Item -force
+                Remove-Item -force -Recurse
     }
 }
