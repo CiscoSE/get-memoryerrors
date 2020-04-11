@@ -31,7 +31,7 @@ $Global:InventoryReportFragments = ''
 $datetime = get-date -format yyyyMMdd-HHmmss
 
 #If you have bad blade, this ensures the script doesn't fail. 
-$ErrorActionPreference = "SilentlyContinue" # Other Options: "Continue" "SilentlyContinue" "Stop"
+$ErrorActionPreference = "Stop" # Other Options: "Continue" "SilentlyContinue" "Stop"
 
 $Global:CSS = @"
     <Title>Memory Error TAC Report</Title>
@@ -190,6 +190,22 @@ Function toolLoadCheck {
     }
 }
 
+Function memVendorLookup {
+    param(
+        $VendorCode
+    )
+
+    $returnVendorCode = switch ($VendorCode){
+        '0x2C00' {'Micron';  break}
+        '0x802C' {'Micron';  break}
+        '0x80AD' {'Hynix';   break}
+        '0x80CE' {'Samsung'; break}
+        '0xAD00' {'Hynix';   break}
+        '0xCE00' {'Samsung'; break}
+        Default {$_}
+    }
+    return $returnVendorCode
+}
 
 function process-MemoryStats {
     param (
@@ -202,17 +218,6 @@ function process-MemoryStats {
         # We write all results to the logs, but only DIMMs that show errrors should go into the TAC report.
     }
     process{
-        $MemoryTranslation = { param($MemoryID)
-            switch ($MemoryID){
-                '0x2C00' {'Micron';  break}
-                '0x802C' {'Micron';  break}
-                '0x80AD' {'Hynix';   break}
-                '0x80CE' {'Samsung'; break}
-                '0xAD00' {'Hynix';   break}
-                '0xCE00' {'Samsung'; break}
-                Default {$_}
-            }
-        }
         
         $MemoryStatReport = New-Object -type psobject
         #All of the memory attributes written to the log. 
@@ -224,16 +229,10 @@ function process-MemoryStats {
                 capacity, 
                 Clock, 
                 Type, 
-                @{Name='Vendor';Expression={&$MemoryTranslation -MemoryID $_.Vendor }},
+                @{Name='Vendor';Expression={memVendorLookup -VendorCode $_.Vendor }},
                 Serial, 
                 Model, 
                 state
-        $MemorySubProperties |
-            ConvertTo-Html -as table -Fragment |
-                out-file -FilePath $InventoryPath -append
-        $MemoryStats |
-            fl * |
-                out-file -FilePath $Global:ProcessingLogFile -Append
         
         foreach ($Attribute in ($MemoryStats | get-member | ?{$_.name -match "error"}).name){
             if (($MemoryStats).($Attribute) -ne 0){
@@ -298,17 +297,26 @@ function Process-BaseServer {
     
 }
 
-#function add-ServerToInventory{
-#    param(
-#        [parameter(mandatory=$true)][string]$Serial,
-#        [parameter(mandatory=$true)][string]$InventoryPath,
-#        [parameter(mandatory=$true)]$content 
-#    )
-#
-#    $content | select model, serverid, MemorySpeed, TotalMemory, AvailableMemory, NumOfCores, NumOfCpus 
-#        convertto-html -As list -Fragment -PreContent "<h2 id=$($Serial)>Server Serial: $($serial)</h2>" | 
-#            out-file -FilePath $InventoryPath -Append
-#}
+
+function write-MemoryInventory {
+    Param(
+        $InventoryFilePath,
+        $Inventory
+    )
+    $Inventory | Select `
+        Location,
+        Serial,
+        @{Name='Vendor'; Expression={memVendorLookup -VendorCode $_.vendor}},
+        Model,
+        Capacity,
+        Clock,
+        FormFactor,
+        OperState,
+        Operability,
+        Presence |
+            ConvertTo-Html -as Table -Fragment |
+                out-file -FilePath $InventoryFilePath -Append
+}
 
 function main {
     param(
@@ -347,14 +355,14 @@ function main {
 
             $ServerListHTML | out-file -FilePath ($InventoryReportPath + "\" + $targetHost + '.html') -append
 
-            $serverList | 
+            $serverList |
                 %{
-                    #add-ServerToInventory -Serial $_.serial -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -content $_
                     $ServerErrorCount = 0
                     if ($ServerReport){remove-variable ServerReport}
                     $ServerProperties =  (process-BaseServer -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
-                    $ServerReport += $ServerProperties
+                    $ServerReport = $ServerProperties
                     $memoryList = ($_ | Get-UCSComputeBoard | Get-UcsMemoryArray | get-ucsMemoryUnit | sort location )
+                    write-MemoryInventory -InventoryFilePath ($InventoryReportPath + "\" + $targetHost + '.html') -Inventory $MemoryList
                     $memoryList | %{
                         $ErrorFound = $False
                         if ($MemoryReport){Remove-Variable -Name MemoryReport}
@@ -363,12 +371,15 @@ function main {
                             $ErrorFound, $MemoryReport = (process-MemoryStats -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
                         }
                         if($errorFound) {
+                            $TacReportName = ($TACReportPath + "\" + $_.serial + ".html")
                             $ServerErrorCount += 1
                             $serverReport += $MemoryReport
                         } 
                     }
-                    if ($serverErrorCount -gt 0) {$ServerReportCombined += $serverReport}
+                    if ($serverErrorCount -gt 0) {ConvertTo-Html -Head $Global:CSS -body $ServerReport |
+                        Out-File -FilePath $tacReportName -Append}
                 }
+
         }
         else{
             write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
@@ -379,10 +390,6 @@ function main {
         if ($ucsConnection) { 
             $disconnect = (disconnect-ucs)
             write-Event -type INFO -message "`tDisconnecting from $targetHost"
-        }
-        if ($ServerReportCombined){
-             ConvertTo-Html -Head $Global:CSS -body $ServerReportCombined |
-                Out-File -FilePath $tacReportName -Append
         }
         $inventoryReport = get-content ($InventoryReportPath + "\" + $targetHost + '.html')
         convertto-html -Head $Global:CSS -Body $inventoryReport | Out-File ($InventoryReportPath + "\" + $targetHost + '.html')
@@ -402,7 +409,7 @@ if (-not ($ProcessingLogName)){
 $Global:ProcessingLogFile = format-Log -LogFilePath $ProcessingLogPath -LogFileName $ProcessingLogName 
 
 write-screen -type INFO -message "Processing Log File:`t$Global:ProcessingLogFile"
-Write-Screen -type INFO -message "TAC Report File:`t$Global:TACReportFile"
+
 
 $DomainCount = 1
 if (validePowerTool) {
