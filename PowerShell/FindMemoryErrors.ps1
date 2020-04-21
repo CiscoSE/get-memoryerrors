@@ -13,71 +13,463 @@ IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied.
 
 .DESCRIPTION
-This script assumes you are already connected to the domain you want to
-assess. Please see the connect-ucs commandlet for connecting to a UCS Domain.
-#>
+Cisco PowerShell script based on Cisco PowerTool for finding memory errors. 
+Intersight is the best way to get this type of information to the TAC, but
+this tool can help you identify systems that may have memory issues that
+need to be addressed.
 
-$output = ""
+Each time the report is run, a log is created that lists every server in the
+UCS domain. If errors are found, a TAC report is also generated. You can find
+these reports in the following locations by default:
+
+    ./Processing    Contains a report for all servers within a domain
+    ./TACReport     Contains a report for only those servers that have memory errors.
+
+This script only works with fabric interconnects and will not work with
+stand-alone C series servers.
+
+.PARAMETER DomainList
+Comma seperated list of IP addresses to be assessed. This needs to be the IP
+address of the cluster IP for your fabric interconnects. 
+
+.PARAMETER Global:Credentials
+Allows you to pass a credentials object if you already have one. 
+
+.PARAMETER ProcessingLogName
+By default we use a date time stamp for the Processing Log, but you can
+specify a log name.
+
+.PARAMETER ProcessingLogPath
+By default the log is created in the Processing subdirectory in the folder
+you run this script from. You can specify a different path. Do not put a
+following \ at the end of the path.
+
+.PARAMETER TACReport
+This is the directory that TAC reports will be placed in. TAC reports are
+named with the serial number of the server that memory errors were found in.
+Servers without memory errors are not reported in the TAC logs. 
+
+.EXAMPLE
+FindMemoryErrors.ps1 -DomainList 1.1.1.10
+
+Run a report for a single domain
+
+
+.Example
+FindMemoryErrors.ps1 -DomainList 1.1.1.10,1.1.2.10
+
+Run a report for more then one domain
+
+
+
+#>
+[cmdletbinding()]
+param(
+    [parameter(mandatory=$true)][array]$DomainList,
+    [parameter(mandatory=$false)][pscredential]$Global:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password."),
+    [parameter(mandatory=$false)][string]$ProcessingLogName,
+    [parameter(mandatory=$false)][string]$ProcessingLogPath = '.\Processing',
+    [parameter(mandatory=$false)][string]$TACReportPath = '.\TACReport'
+)
+
+if (-not ($Global:Credentials)){
+    write-host "Credentials required. Script will exit."
+    exit
+}
+
+$Global:InventoryReportFragments = ''
 #Get Date and time for output file time stamp.
 $datetime = get-date -format yyyyMMdd-HHmmss
-$FileName = "$($datetime)-MemoryReport.txt"
 
 #If you have bad blade, this ensures the script doesn't fail. 
-$ErrorActionPreference = "SilentlyContinue"
-#Get a list of servers we want to loop through
-$HardwareList = Get-UcsServer
+$ErrorActionPreference = "Stop" # Other Options: "Continue" "SilentlyContinue" "Stop"
 
-#Loop through the list of servers
-Get-ucsserver | %{
-    #Get the service profile for this computer only. 
-    $profileName = get-ucsserviceprofile -dn ($_.assignedToDn)
-    
-    #Check to see if the service profile was found (There can be only one).
-    if ($profileName.count -eq 1)
-        {
-        #If it exists we associate it.
-        $ServerName = $profileName[0].Name
-        }
-    else
-        {
-        #If we did not find a profile we assign default text.
-        $ServerName = "Undetermined / Not assigned / $($_.Dn)"
-        }
-    # Have a seperator and the server name so we know where one server begins and the next ends.
-    $output += "#" * 50 + "`n"
-    $output += "$ServerName`n" 
-    #Hand the server name into the pipeline. You need get-ucsComputeBoard to get to deeper levels.
-    #We do not use the output from get-ucscomputeboard or get-ucsmemoryarray, but you could... 
-    #They are just there to get us deeper into the system
-    $_ | 
-        Get-UcsComputeBoard |
-            Get-UcsMemoryArray |
-                Get-UcsMemoryunit | 
-                    sort-object location |   #We sorted them so that they show up in order in the list. 
-                        ?{$_.operstate -ne "removed"} | %{
-                            #Next line is a place holder we can use the information at deeper levels.
-                            $MemoryProp = $_
-                            #These are memory errors
-                            $MemStat = $_ | Get-UcsMemoryErrorStats
-                            #Write each memory module to the screen
-                            $output += "Location: $($MemoryProp.Location)",
-                                "Array: $($MemoryProp.Array)",
-                                "Bank: $($MemoryProp.Bank)",
-                                "Capacity: $($MemoryProp.Capacity)",
-                                "Mhz: $($MemoryProp.clock)",
-                                "Model: $($MemoryProp.Model)",
-                                "Vendor: $($MemoryProp.vendor)",
-                                "State: $($MemoryProp.Operstate)",
-                                "Serial: $($MemoryProp.Serial)`n"
-                            #Search the memory errors and only output the ones where the errors show up...
-                            foreach ($attribute in ($MemStat | get-member | ?{$_.name -match "error"}).name)
-                                {
-                                if (($MemStat).($attribute) -ne 0)
-                                    {
-                                    $output += "     $($attribute): $($Memstat.($attribute))`n"
-                                    }
-                                }
-                            }
- 
+$Global:CSS = @"
+    <Title>Memory Error TAC Report</Title>
+    <Style type='text/css'>
+    SrvProp{
+        boarder:20pt;
     }
-    $output | out-file $FileName
+
+    td, th { border:0px solid black; 
+         border-collapse:collapse;
+         white-space:pre; }
+    th { color:white;
+     background-color:black; }
+    table, tr, td, th { padding: 2px; margin: 0px ;white-space:pre; }
+    tr:nth-child(odd) {background-color: lightgray}
+    table { width:95%;margin-left:5px; margin-bottom:20px;}
+
+    </Style>
+"@
+
+
+function write-screen {
+    param(
+        [parameter(mandatory=$false,position=0)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+                                               [string]$type = "INFO",
+        [parameter(mandatory=$true,Position=1)][string]$message
+     )
+    switch($type){
+        "INFO" {$Color = "Green";  break}
+        "FAIL" {$Color = "RED";    break}
+        "WARN" {$Color = "Yellow"; break}
+    }
+    write-host " [ " -NoNewline
+    write-host $type -ForegroundColor $color -NoNewline
+    write-host " ]     " -NoNewline
+    write-host $message
+    if ($type -eq "FAIL") {
+        exit
+    }    
+}
+
+function Write-Event{
+    param(
+        [parameter(mandatory=$false,position=0)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+                                               [string]$type = "INFO",
+        [parameter(mandatory=$true,Position=1)][string]$message,
+        [parameter(mandatory=$false)]          [switch]$logOnly = $false #When True, we only write this data to the log file.
+    )
+
+    ("[ $type ] $message") | out-file -Append -FilePath $Global:ProcessingLogFile
+
+    if ($logOnly){
+        return
+    }
+
+    write-screen -type $type -message $message
+    if ($type -eq "FAIL") {
+        exit
+    }
+} 
+
+function write-screen {
+    param(
+        [parameter(mandatory=$false,position=0)]
+            [ValidatePattern("INFO|FAIL|WARN")]
+                                               [string]$type = "INFO",
+        [parameter(mandatory=$true,Position=1)][string]$message
+     )
+    switch($type){
+        "INFO" {$Color = "Green";  break}
+        "FAIL" {$Color = "RED";    break}
+        "WARN" {$Color = "Yellow"; break}
+    }
+    write-host " [ " -NoNewline
+    write-host $type -ForegroundColor $color -NoNewline
+    write-host " ]     " -NoNewline
+    write-host $message
+    if ($type -eq "FAIL") {
+        exit
+    }    
+}
+
+Function format-Log {
+    param(
+        $LogFilePath,
+        $LogFileName
+    )
+    if ($LogFilePath -notmatch "\$"){
+        return ($LogFilePath + "\" + $LogFileName)
+    }
+    Else{
+        return ($LogFilePath + $LogFileName)
+    
+    }
+
+}
+
+function validateDirectory {
+    param(
+        [parameter(mandatory=$true)][string]$Directory
+    )
+    begin {
+        write-screen -type INFO -message "Checking $Directory Exists"
+    }
+    process{
+        $error.clear()
+        if ( -not (test-path $directory)){
+            $result = md $directory
+            if ($error[0]){
+                write-screen -type WARN -message "Directory $Directory does not exist and could not be created"
+                Write-screen -type FAIL -message "Directory $Directory must be created and writable to continue."
+            }
+            else{
+                Write-screen -type INFO -message "Directory $Directory created"
+            }
+        }
+        else{
+            Write-Screen -type INFO -message "$Directory Directory Exists"
+        }
+    }
+}
+
+function validePowerTool {
+    Param()
+    Begin {
+        write-verbose "We need Cisco PowerTool to function. Checking for it now."
+    }
+    Process{
+        $modules = get-Module -ListAvailable -Name Cisco.UCSManager
+        If ($Modules.count -eq "1") {
+            Write-Event -message "Powertool Available"
+            return $true
+        else
+            Write-Event -message "Powertool Not available"
+            return $false
+        }
+    end {
+    }
+    }
+}
+
+
+Function toolLoadCheck {
+    param()
+    #These modules need to be loaded to move on.
+    $modules = get-module
+    if ("Cisco.Ucs.Core" -in $modules.name -and "Cisco.UCSManager" -in $modules.name){
+        Write-Event -type INFO -message "`tModules are loaded"
+        return $true
+    }
+    else{
+        write-Event -type "WARN" -message "`tModules did not load. "
+        return $false
+    }
+}
+
+Function memVendorLookup {
+    param(
+        $VendorCode
+    )
+
+    $returnVendorCode = switch ($VendorCode){
+        '0x2C00' {'Micron';  break}
+        '0x802C' {'Micron';  break}
+        '0x80AD' {'Hynix';   break}
+        '0x80CE' {'Samsung'; break}
+        '0xAD00' {'Hynix';   break}
+        '0xCE00' {'Samsung'; break}
+        Default {$_}
+    }
+    return $returnVendorCode
+}
+
+function process-MemoryStats {
+    param (
+        [parameter(mandatory=$true)]$MemoryStats,
+        [parameter(mandatory=$true)]$MemoryProperties,
+        [parameter(mandatory=$true)]$InventoryPath
+    )
+    begin{
+        write-event -type INFO -message "`t`t`tProcessing Server Memory Statistics for $($MemoryProperties.Location)"
+        # We write all results to the logs, but only DIMMs that show errrors should go into the TAC report.
+    }
+    process{
+        
+        $MemoryStatReport = New-Object -type psobject
+        #All of the memory attributes written to the log. 
+        $errorFound = $false
+        
+        $MemorySubProperties = $MemoryProperties |
+            select `
+                location, 
+                capacity, 
+                Clock, 
+                Type, 
+                @{Name='Vendor';Expression={memVendorLookup -VendorCode $_.Vendor }},
+                Serial, 
+                Model, 
+                state
+        
+        foreach ($Attribute in ($MemoryStats | get-member | ?{$_.name -match "error"}).name){
+            if (($MemoryStats).($Attribute) -ne 0){
+                $memoryStatReport | add-member -MemberType NoteProperty -Name $Attribute -value $MemoryStats.($Attribute)
+                Write-Event -type WARN -message "`t`t`t$($Attribute):`t$($MemoryStats.($attribute))"
+                $errorFound = $true
+            }
+        }
+        if ($errorFound){
+            $MemorySubPropertiesHTML = ($MemorySubProperties | convertto-html -As table -Fragment -PreContent "<h2>Memory Properties</h2>")
+            $MemoryStatReportComplete = $MemorySubPropertiesHTML + ($MemoryStatReport | convertto-html -As Table -Fragment)
+        } 
+        
+        return $ErrorFound, ($MemoryStatReportComplete)
+    }
+    end{}
+}
+
+function Process-BaseServer {
+    Param (
+        [parameter(mandatory=$true)]$ServerProperties,
+        [parameter(mandatory=$true)]$ServerFirmware,
+        [parameter(mandatory=$true)]$InventoryPath
+    )
+    begin{Write-Event -type INFO -message "`t`tProcessing $($ServerProperties.Serial)"}
+    process{
+       $report = $ServerProperties | 
+        Select `
+            Serial, 
+            Model, 
+            ServerID, 
+            TotalMemory, 
+            AvailableMemory, 
+            MemorySpeed, 
+            Ucs, 
+            NumOfCores, 
+            NumOfCPUs, 
+            AdminState,  
+            Lc,
+            @{Name="BiosVersion"; Expression={($ServerFirmware | ?{$_.type -match 'bios'})[0].version}},
+            @{Name="CIMCVersion"; Expression={($ServerFirmware | ?{$_.type -match "(blade|rack)-controller" -and $_.deployment -match 'system'})[0].version}},
+            @{Name="BoardControllerVersion"; Expression={($ServerFirmware | ?{$_.type -match "board-controller" -and $_.deployment -match 'system'})[0].version}}
+       # Process HTML Output.
+       $report | Select `
+            Serial, 
+            Model, 
+            ServerID, 
+            TotalMemory, 
+            AvailableMemory, 
+            MemorySpeed, 
+            NumOfCores, 
+            NumOfCPUs, 
+            AdminState,  
+            Lc,
+            BiosVersion,
+            CIMCVersion,
+            BoardControllerVersion |  
+                convertto-html -as List -fragment -PreContent "<h1 id='$($ServerProperties.serial)' >Server Serial Number: $($ServerProperties.Serial)</h1>" |
+                    Out-File -FilePath $InventoryPath -append
+       Return ($report | convertto-html -As List -Fragment -PreContent "<h1>System Report</h1>")
+   }
+    
+}
+
+
+function write-MemoryInventory {
+    Param(
+        $InventoryFilePath,
+        $Inventory
+    )
+    $Inventory | Select `
+        Location,
+        Serial,
+        @{Name='Vendor'; Expression={memVendorLookup -VendorCode $_.vendor}},
+        Model,
+        Capacity,
+        Clock,
+        FormFactor,
+        OperState,
+        Operability,
+        Presence |
+            ConvertTo-Html -as Table -Fragment |
+                out-file -FilePath $InventoryFilePath -Append
+}
+
+function main {
+    param(
+        [parameter(mandatory=$true)][string]$targetHost,
+        [parameter(mandatory=$True)][string]$tacReportName
+    )
+    begin{
+        Write-Event -type INFO -message "Processing $targetHost"
+    }
+    process{
+        $DomainReport = @{}
+        #Load PowerShell Modules if needed.
+        if (-not (toolLoadCheck)){
+            get-module -ListAvailable -name Cisco.UCSManager | import-module -verbose:$false 
+            if (-not (toolLoadCheck)){
+                write-Event -type FAIL -message "Failed to load tools, script cannot continue"
+            }
+        }
+        #Connect to UCS
+        $ucsConnection = connect-ucs -name $targetHost -Credential $Credentials
+        if ($ucsConnection){
+            write-event -type INFO -message "`tConnected to $targetHost"
+            $serverList = Get-UcsServer
+
+            #Create a header for our Inventory File
+
+            $ServerListHTML = $serverList | 
+                select `
+                    serial,
+                    @{Name='ServiceProfile'; Expression={($_.AssignedToDn) -replace ".+ls-",''}} | 
+                        convertto-html -as Table -fragment
+            $ServerList | %{
+                $Serial = $_.serial
+                $serverListHTML = $ServerListHTML -replace "<td>$($serial)</td>","<td><a href='#$($serial)' >$($serial)</a></td>"
+            }
+
+            $ServerListHTML | out-file -FilePath ($InventoryReportPath + "\" + $targetHost + '.html') -append
+
+            $serverList |
+                %{
+                    $ServerErrorCount = 0
+                    if ($ServerReport){remove-variable ServerReport}
+                    $ServerProperties =  (process-BaseServer -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
+                    $ServerReport = $ServerProperties
+                    $memoryList = ($_ | Get-UCSComputeBoard | Get-UcsMemoryArray | get-ucsMemoryUnit | sort location )
+                    write-MemoryInventory -InventoryFilePath ($InventoryReportPath + "\" + $targetHost + '.html') -Inventory $MemoryList
+                    $memoryList | %{
+                        $ErrorFound = $False
+                        if ($MemoryReport){Remove-Variable -Name MemoryReport}
+                        $MemoryStats = ($_ | Get-UcsMemoryErrorStats)
+                        if ($MemoryStats){
+                            $ErrorFound, $MemoryReport = (process-MemoryStats -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
+                        }
+                        if($errorFound) {
+                            $TacReportName = ($TACReportPath + "\" + $_.serial + ".html")
+                            $ServerErrorCount += 1
+                            $serverReport += $MemoryReport
+                        } 
+                    }
+                    if ($serverErrorCount -gt 0) {ConvertTo-Html -Head $Global:CSS -body $ServerReport |
+                        Out-File -FilePath $tacReportName -Append}
+                }
+
+        }
+        else{
+            write-event -type WARN -message "`tFailed to connect to $targetHost. This domain is not processed"
+            write-event -type WARN -message "`t$($error[0].Exception)"
+        }
+
+
+        if ($ucsConnection) { 
+            $disconnect = (disconnect-ucs)
+            write-Event -type INFO -message "`tDisconnecting from $targetHost"
+        }
+        $inventoryReport = get-content ($InventoryReportPath + "\" + $targetHost + '.html')
+        convertto-html -Head $Global:CSS -Body $inventoryReport | Out-File ($InventoryReportPath + "\" + $targetHost + '.html')
+    }
+}
+
+$Global:InventoryReportPath = ($ProcessingLogPath + '\' + $datetime)
+
+validateDirectory -Directory $ProcessingLogPath
+validateDirectory -Directory $TACReportPath
+validateDirectory -Directory $Global:InventoryReportPath
+
+if (-not ($ProcessingLogName)){
+    $ProcessingLogName = ($datetime + "-Processing.log")
+}
+
+$Global:ProcessingLogFile = format-Log -LogFilePath $ProcessingLogPath -LogFileName $ProcessingLogName 
+
+write-screen -type INFO -message "Processing Log File:`t$Global:ProcessingLogFile"
+
+
+$DomainCount = 1
+if (validePowerTool) {
+    $DomainList | %{
+    $TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport-"+ $DomainCount +".html")        
+        main -targetHost $_ -tacReportName $TACReportFile
+        $DomainCount += 1
+    }
+}
+else {
+    Write-verbose "PowerTool Modules are required for this script. Please obtain them from software.cisco.com"
+}
