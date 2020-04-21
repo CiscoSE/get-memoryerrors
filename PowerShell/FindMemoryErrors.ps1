@@ -207,7 +207,7 @@ function validateDirectory {
     }
 }
 
-function validePowerTool {
+function validatePowerTool {
     Param()
     Begin {
         write-verbose "We need Cisco PowerTool to function. Checking for it now."
@@ -463,7 +463,7 @@ write-screen -type INFO -message "Processing Log File:`t$Global:ProcessingLogFil
 
 
 $DomainCount = 1
-if (validePowerTool) {
+if (validatePowerTool) {
     $DomainList | %{
     $TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport-"+ $DomainCount +".html")        
         main -targetHost $_ -tacReportName $TACReportFile
