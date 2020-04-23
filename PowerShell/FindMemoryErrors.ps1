@@ -422,13 +422,13 @@ function main {
                             $ErrorFound, $MemoryReport = (process-MemoryStats -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
                         }
                         if($errorFound) {
-                            $TacReportName = ($TACReportPath + "\" + $_.serial + ".html")
+                            $TacReportName = ($TACReportPath + "\" + $serial + ".html")
                             $ServerErrorCount += 1
                             $serverReport += $MemoryReport
                         } 
                     }
                     if ($serverErrorCount -gt 0) {ConvertTo-Html -Head $Global:CSS -body $ServerReport |
-                        Out-File -FilePath $tacReportName -Append}
+                        Out-File -FilePath $tacReportName}
                 }
 
         }
