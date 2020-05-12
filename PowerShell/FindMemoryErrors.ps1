@@ -214,15 +214,13 @@ function validatePowerTool {
     }
     Process{
         $modules = get-Module -ListAvailable -Name Cisco.UCSManager
-        If ($Modules.count -eq "1") {
+        If ($Modules.count -gt "0") {
             Write-Event -message "Powertool Available"
             return $true
         else
             Write-Event -message "Powertool Not available"
             return $false
         }
-    end {
-    }
     }
 }
 
@@ -459,15 +457,14 @@ if (-not ($ProcessingLogName)){
 
 $Global:ProcessingLogFile = format-Log -LogFilePath $ProcessingLogPath -LogFileName $ProcessingLogName 
 
-write-screen -type INFO -message "Processing Log File:`t$Global:ProcessingLogFile"
-
+write-screen -type INFO -message "Processing Log File: `t$Global:ProcessingLogFile"
 
 $DomainCount = 1
 if (validatePowerTool) {
     $DomainList | %{
     $TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport-"+ $DomainCount +".html")        
-        main -targetHost $_ -tacReportName $TACReportFile
-        $DomainCount += 1
+    main -targetHost $_ -tacReportName $TACReportFile
+    $DomainCount += 1
     }
 }
 else {
