@@ -82,7 +82,7 @@ $Global:InventoryReportFragments = ''
 $datetime = get-date -format yyyyMMdd-HHmmss
 
 #If you have bad blade, this ensures the script doesn't fail. 
-$ErrorActionPreference = "Stop" # Other Options: "Continue" "SilentlyContinue" "Stop"
+$ErrorActionPreference = "SilentlyContinue" # Other Options: "Continue" "SilentlyContinue" "Stop"
 
 $Global:CSS = @"
     <Title>Memory Error TAC Report</Title>
