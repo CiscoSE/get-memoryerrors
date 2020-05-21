@@ -369,8 +369,7 @@ function write-MemoryInventory {
 
 function main {
     param(
-        [parameter(mandatory=$true)][string]$targetHost,
-        [parameter(mandatory=$True)][string]$tacReportName
+        [parameter(mandatory=$true)][string]$targetHost
     )
     begin{
         Write-Event -type INFO -message "Processing $targetHost"
@@ -407,9 +406,9 @@ function main {
             $serverList |
                 %{
                     $ServerErrorCount = 0
+                    $OneSerial = $_.serial
                     if ($ServerReport){remove-variable ServerReport}
-                    $ServerProperties =  (process-BaseServer -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
-                    $ServerReport = $ServerProperties
+                    $ServerReport =  (process-BaseServer -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -ServerProperties $_ -serverFirmware (Get-UcsFirmwareRunning -filter "dn -ilike $($_.dn)*" ))
                     $memoryList = ($_ | Get-UCSComputeBoard | Get-UcsMemoryArray | get-ucsMemoryUnit | sort location )
                     write-MemoryInventory -InventoryFilePath ($InventoryReportPath + "\" + $targetHost + '.html') -Inventory $MemoryList
                     $memoryList | %{
@@ -420,13 +419,15 @@ function main {
                             $ErrorFound, $MemoryReport = (process-MemoryStats -InventoryPath ($InventoryReportPath + "\" + $targetHost + '.html') -MemoryProperties $_ -MemoryStats ($_ | Get-UcsMemoryErrorStats ))
                         }
                         if($errorFound) {
-                            $TacReportName = ($TACReportPath + "\" + $serial + ".html")
-                            $ServerErrorCount += 1
+                            $TacReportName = ($TACReportPath + "\" + $OneSerial + ".html")
                             $serverReport += $MemoryReport
                         } 
                     }
-                    if ($serverErrorCount -gt 0) {ConvertTo-Html -Head $Global:CSS -body $ServerReport |
-                        Out-File -FilePath $tacReportName}
+                    if ($TACReportName) {
+                        ConvertTo-Html -Head $Global:CSS -body $ServerReport |
+                            Out-File -FilePath $TACReportName
+                        Remove-Variable -Name TACReportName
+                    }
                 }
 
         }
@@ -462,8 +463,8 @@ write-screen -type INFO -message "Processing Log File: `t$Global:ProcessingLogFi
 $DomainCount = 1
 if (validatePowerTool) {
     $DomainList | %{
-    $TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport-"+ $DomainCount +".html")        
-    main -targetHost $_ -tacReportName $TACReportFile
+        $TACReportFile = format-log -LogFilePath $TACReportPath -LogFileName ($datetime + "-TacReport-"+ $DomainCount +".html")        
+        main -targetHost $_ 
     $DomainCount += 1
     }
 }
