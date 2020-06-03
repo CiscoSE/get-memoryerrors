@@ -85,7 +85,6 @@ function writeStatus (){
 }
 
 function checkTarFile () {
-    writeStatus "$tarFileName"
     if [ -s "$tarFileName" ]; then
         writeStatus "Found tar file" "INFO"
         writeStatus "$tarFileName" "INFO"
@@ -93,6 +92,18 @@ function checkTarFile () {
         writeStatus "Unable to read tar file" "FAIL"
     fi
 
+}
+
+function untarFile () {
+    tar -xf "$tarFileName" -C "$workingDirectory"
+    if [ $? != 0 ]; then
+        writeStatus "Unable to extract TAR file " "FAIL"
+    fi
+}
+
+function processTarFile () {
+    serverTarFilePath=$(find "$workingDirectory" -iname "CIMC*.gz" -exec zegrep --with-filename -iE $serialNumber {} \; | cut -d " " -f3)
+    writeStatus "Processing: $serverTarFilePath" "INFO"
 }
 
 #Color Coding for screen output.
@@ -149,3 +160,5 @@ fi
 
 createWorkingDirectory
 checkTarFile
+untarFile
+processTarFile
