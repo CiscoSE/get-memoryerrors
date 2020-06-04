@@ -100,11 +100,32 @@ function untarFile () {
         writeStatus "Unable to extract TAR file " "FAIL"
     fi
 }
+get-ucsmServerPID (){
+    writeStatus "Processing Server Product ID"
+    local ucsmServerPIDRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Board Product Name" {} \; | head -1)"
+    writeReport "$ucsmServerPIDRaw"
+    writeStatus "Board Product Name(PID): $(echo $ucsmServerPIDRaw | cut -d ":" -f2 | xargs)"
+}
+
+get-ucsmServerSerial (){
+    writeStatus "Processing Server Serial"
+    local ucsmServerSerialRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Product Serial Number*${SerialNumber}" {} \; | head -1)"
+    writeReport "$ucsmServerSerialRaw"
+    writeStatus "Server Serial: $(echo $ucsmServerSerialRaw | cut -d ":" -f2 | xargs)"
+}
+
+get-ucsmCIMCVersion (){
+    writeStatus "Processing Server CIMC Version"
+    local ucsmServerVersionRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec zegrep -iE "ver:" {} \; | head -1)"
+    writeReport "$ucsmServerVersionRaw"
+    writeStatus "Server CIMC Firmware Version: $(echo $ucsmServerVersionRaw | cut -d ":" -f2 | xargs)"
+}
+
 
 get-systemInfo () {
-    writeReport "$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Board Product Name" {} \; | head -1)"
-    writeReport "$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Product Serial Number*${SerialNumber}" {} \; | head -1)"
-    writeReport "$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec zegrep -iE "ver:" {} \; | head -1)"
+    get-ucsmServerPID
+    get-ucsmServerSerial
+    get-ucsmCIMCVersion
     #TODO Process DimmBL
     #TODO Process MrcOut
     #TODO Process OBFL
