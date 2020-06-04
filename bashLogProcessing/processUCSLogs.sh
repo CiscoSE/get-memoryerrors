@@ -78,10 +78,10 @@ function writeStatus (){
   fi
   
   printf "%5s[ ${green} INFO ${normal} ] ${1}\n"
+}
 
-  if [ "${writeLog}" = 'enabled' ]; then
-    printf "%5s[ ${green} INFO ${normal} ] ${1}\n" >> $writeLogFile
-  fi
+function writeReport (){
+    printf "${1}\n" >> $memoryReportFileName
 }
 
 function checkTarFile () {
@@ -95,15 +95,56 @@ function checkTarFile () {
 }
 
 function untarFile () {
-    tar -xf "$tarFileName" -C "$workingDirectory"
+    tar -xf "$1" -C "$workingDirectory"
     if [ $? != 0 ]; then
         writeStatus "Unable to extract TAR file " "FAIL"
     fi
 }
 
+get-systemInfo () {
+    writeReport "$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Board Product Name" {} \; | head -1)"
+    writeReport "$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Product Serial Number*${SerialNumber}" {} \; | head -1)"
+    writeReport "$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec zegrep -iE "ver:" {} \; | head -1)"
+    #TODO Process DimmBL
+    #TODO Process MrcOut
+    #TODO Process OBFL
+        #TODO Find Correctable and Uncorrectable errors
+        #TODO Find CATERR if it exists
+    #TODO Process Eng if it exists
+        #TODO How do we find ADDDC Sparing Issues?
+    }
+
 function processTarFile () {
+    #Many customers will send logs for way more servers then we need to evaluate.
+    #We use the serial number to figure out which one we really need.
     serverTarFilePath=$(find "$workingDirectory" -iname "CIMC*.gz" -exec zegrep --with-filename -iE $serialNumber {} \; | cut -d " " -f3)
     writeStatus "Processing: $serverTarFilePath" "INFO"
+    untarFile $serverTarFilePath
+    get-systemInfo
+}
+
+function validateReportDirectory () {
+    #Does the Report directory exist?
+    writeStatus "Checking for ${reportDirectory} directory."
+    if [ -d "$reportDirectory" ]
+    then 
+        writeStatus "Report Directory Exists" "INFO"        
+    else
+        #If it doesn't, create it
+        writeStatus "Creating Report Directory: $reportDirectory"
+        mkdir $reportDirectory
+        if [ $? != 0 ]; then
+            writeStatus "Could not create Report directory" "FAIL"
+        fi
+    fi
+
+    writeStatus "Attempting to create report file" "INFO"
+    touch $memoryReportFileName
+    if [ $? != 0 ]; then
+        writeStatus "Unable to create report file" "FAIL"
+    else
+        writeStatus "Report File created" "INFO"
+    fi
 }
 
 #Color Coding for screen output.
@@ -158,7 +199,13 @@ then
     exit
 fi
 
+#Memory report file - Time Stamped
+memoryReportFileName="${reportDirectory}/$(date +%Y%m%d-%H%M%S)-MemoryReport.txt"
+writeStatus "Memory Report will be written here: ${memoryReportFileName}" "INFO"
+
+
+validateReportDirectory
 createWorkingDirectory
 checkTarFile
-untarFile
+untarFile "$tarFileName"
 processTarFile
