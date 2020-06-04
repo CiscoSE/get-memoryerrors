@@ -70,14 +70,22 @@ function createWorkingDirectory (){
     fi
 }
 
-function writeStatus (){	
-  if [ "${2}" = "FAIL" ]; then 
-    printf "%5s[ ${red} FAIL ${normal} ] ${1}\n"
-    # Begin Exit Reroutine
-    exitRoutine
-  fi
-  
-  printf "%5s[ ${green} INFO ${normal} ] ${1}\n"
+function writeStatus (){
+    case $2 in
+        FAIL)
+           printf "%5s[ ${red} FAIL ${normal} ] ${1}\n" 
+           # Begin Exit Reroutine
+           exitRoutine
+        ;;
+        WARN)
+            printf "%5s[ ${yellow} WARN ${normal} ] ${1}\n"
+        ;;
+        INFO)
+            printf "%5s[ ${green} INFO ${normal} ] ${1}\n"
+        ;;
+        *)
+            printf "%5s[ ${green} INFO ${normal} ] ${1}\n"
+    esac
 }
 
 function writeReport (){
