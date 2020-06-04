@@ -128,12 +128,64 @@ get-ucsmCIMCVersion (){
     writeReport "$ucsmServerVersionRaw"
     writeStatus "Server CIMC Firmware Version: $(echo $ucsmServerVersionRaw | cut -d ":" -f2 | xargs)"
 }
+returnDimmsWithErrors () {
+    dimmsWithErrors="$(echo "$1" | egrep -ioE "[A-Z][0-9] \([0-9A-F]{2}\).*([1-9][0-9]*.*)" | sed -e 's/  */ /g')"
+}
 
+reportDimmsWithErrors () {
+    while IFS= read -r line; do
+        correctableErrTotal=''
+        correctableErrThisBoot=''
+        uncorrectableErrTotal=''
+        uncorrectableErrThisBoot=''
+        local dimmWithErrors=$(echo "$line" | xargs | cut -d ' ' -f1)
+        local correctableErrTotal=$(echo "$line" | xargs | cut -d ' ' -f3) 
+        local correctableErrThisBoot=$(echo "$line" | xargs | cut -d ' ' -f4)
+        local uncorrectableErrTotal=$(echo "$line" | xargs | cut -d ' ' -f5) 
+        local uncorrectableErrThisBoot=$(echo "$line" | xargs | cut -d ' ' -f6)
+        writeStatus "DIMM $dimmWithErrors has errors" "WARN"
+        writeReport "\n\nDIMM $dimmWithErrors has errors"
+        
+        writeStatus "\tCorrectable Errors Total:\t$correctableErrTotal" "WARN"
+        writeReport "\tCorrectable Errors Total:\t$correctableErrTotal" 
+        writeStatus "\tCorrectable Errors This Boot:\t$correctableErrThisBoot" "WARN"
+        writeReport "\tCorrectable Errors This Boot:\t$correctableErrThisBoot" 
+        writeStatus "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" "WARN"
+        writeReport "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" 
+        writeStatus "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "WARN"
+        writeReport "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot"        
+    done <<< "$1"
+}
+
+process-DimmBL (){
+writeStatus "Searching for DIMM Errors in DimmBL.log"
+    #Location is not stable, so we search broadly in var
+    local ucsmDimmBlFileLoc="$(find "${workingDirectory}/var" -type f -iname "DimmBL.log" | head -1)"
+    if [ -z $ucsmDimmBlFileLoc ];then
+        writeStatus "DimmBL.log Location not found. No reporting from this file is possible" "WARN"
+        return
+    fi
+    
+    writeStatus "DimmBL.log Location: $ucsmDimmBlFileLoc"
+    local dimmErrorCountFullList="$(cat $ucsmDimmBlFileLoc | awk '/[-\s]*PER DIMM ERROR COUNTS/,/^ *$/')"
+    dimmsWithErrors=''
+    returnDimmsWithErrors "${dimmErrorCountFullList}"
+    reportDimmsWithErrors "$dimmsWithErrors"
+
+    printf "\n\n" >> $memoryReportFileName 
+    echo "$dimmErrorCountFullList" >> $memoryReportFileName
+    printf "\n\n" >> $memoryReportFileName
+}
+get-ucsmDimmErrors (){
+    process-DimmBL    
+
+}
 
 get-systemInfo () {
     get-ucsmServerPID
     get-ucsmServerSerial
     get-ucsmCIMCVersion
+    get-ucsmDimmErrors
     #TODO Process DimmBL
     #TODO Process MrcOut
     #TODO Process OBFL
