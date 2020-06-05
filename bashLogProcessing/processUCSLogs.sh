@@ -92,6 +92,12 @@ function writeReport (){
     printf "${1}\n" >> $memoryReportFileName
 }
 
+function writeboth (){
+    
+    writeReport "$1"
+    writeStatus "$1" "$2"
+}
+
 function checkTarFile () {
     if [ -s "$tarFileName" ]; then
         writeStatus "Found tar file" "INFO"
@@ -133,6 +139,7 @@ returnDimmsWithErrors () {
 }
 
 reportDimmsWithErrors () {
+    dimmsWithErrors=''
     while IFS= read -r line; do
         correctableErrTotal=''
         correctableErrThisBoot=''
@@ -145,7 +152,13 @@ reportDimmsWithErrors () {
         local uncorrectableErrThisBoot=$(echo "$line" | xargs | cut -d ' ' -f6)
         writeStatus "DIMM $dimmWithErrors has errors" "WARN"
         writeReport "\n\nDIMM $dimmWithErrors has errors"
-        
+        if [ ! -z $dimmWithErrors ]; then
+            if [ -z $dimmsWithErrors ]; then
+                dimmsWithErrors="$dimmWithErrors"
+            else
+                dimmsWithErrors="$dimmsWithErrors$dimmWithErrors"
+            fi
+        fi
         writeStatus "\tCorrectable Errors Total:\t$correctableErrTotal" "WARN"
         writeReport "\tCorrectable Errors Total:\t$correctableErrTotal" 
         writeStatus "\tCorrectable Errors This Boot:\t$correctableErrThisBoot" "WARN"
@@ -176,17 +189,100 @@ writeStatus "Searching for DIMM Errors in DimmBL.log"
     echo "$dimmErrorCountFullList" >> $memoryReportFileName
     printf "\n\n" >> $memoryReportFileName
 }
-get-ucsmDimmErrors (){
-    process-DimmBL    
+function get-MrcOutPathNormal (){
+     mrcOutFilePath="$(find $workingDirectory -type f -iname "MrcOut.txt" | head -1)"
+}
+function get-MrcOutPathNv (){
+    # Looking for the MrcOut file within the nvram gz file normally found in ./tmp/
+    # Because the folder has a random sub folder name, we are using find to locate it.
+    writeStatus "MrcOut.txt not found in BIOS directory. Trying nvram.tar.gz file" "INFO"
+    nvramgzFilePath="$(find "$workingDirectory/tmp" -type f -iname "*-nvram.tar.gz" | head -1)"
+    if [ -z "$nvramgzFilePath" ]; then
+        #We didn't find the nvram.tar.gz file either with an MrcOut file. We are kind of out options. 
+        writeStatus "MrcOut file cannot be found. Serials numbers and black listing data may not be available." "WARN"
+        return
+    else
+        #Unzipping nvram.tar.gz file to access MrcOut file.
+        tar -xf "$nvramgzFilePath" -C "$workingDirectory"
+        mrcOutFilePath="$(find "$workingDirectory/nv" -type f -iname "MrcOut" | egrep -iE "MrcOut$|MrcOut.txt$" | head -1)"
+    fi
+}
+
+function locateMrcOut () {
+    writeStatus "Searching for MrcOut.txt"
+    #We prefer this one as it is the easiest to find.
+    get-MrcOutPathNormal   
+    if [ -z "$mrcOutFilePath" ]; then
+        # Not completely unexpected...
+        get-MrcOutPathNv
+    fi
+}
+
+function report-MrcOutInventory () {
+    writeStatus "Inventory for $dimm will be reported"
+    local mrcoutDimmManufacture="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f7 | xargs | cut -d " " -f1 | xargs)"
+    local mrcoutDimmSize="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f2 | xargs)"
+    local mrcoutDimmSpeed="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f6 | xargs)"
+    local mrcoutDimmSerial="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f10 | xargs)"
+    local mrcoutDimmVendorPID="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f11 | xargs)"
+    
+    writeboth "====== MrcOut DIMM Data for $dimm ======"
+    writeboth "\tManufacture:\t$mrcoutDimmManufacture" "INFO"
+    writeboth "\tSize:\t\t$mrcoutDimmSize" "INFO"    
+    writeboth "\tSerial:\t\t$mrcoutDimmSerial" "INFO"
+    writeboth "\tVendor PID:\t$mrcoutDimmVendorPID" "INFO"
+}
+
+function get-MrcOutInventory () {
+    writeStatus "Starting memory evaluation from MrcOut"
+    for dimm in $dimmsWithErrors; do
+        thisDimmMrcOutInventory=''
+        # Looking to see if we can find that DIMM in the MrcOut file.
+        thisDimmMrcOutInventory="$(echo "$mrcOutDimmInventory" | egrep -iE "$dimm")"
+        if [ ! -z "$thisDimmMrcOutInventory" ]; then
+            report-MrcOutInventory $thisDimmMrcOutInventory
+        else
+            writeStatus "No Inventory for DIMM $dimm found"
+        fi
+    done
+
+}
+function get-MrcOutStatus () {
+    # This is about looking for black listing.
+    writeStatus "Not really here yet... Work started" "FAIL"
+
 
 }
 
-get-systemInfo () {
+function processMrcOut () {
+    #If we can find it, we want to process it. In some cases it cannot be found.
+    # This is false until we find it. If we don't find it we need to get the serial numbers
+    # from the dimmsData folder, which is more difficult.
+    MrcOutFound=$false 
+    locateMrcOut
+    writeStatus "MrcOut Path:\t${mrcOutFilePath}"
+    if [ -z "$mrcOutFilePath" ];then
+        writeStatus "MrcOut file was not found and cannot be processed" "WARN"
+    else
+        mrcOutDimmInventory=$(cat "$mrcOutFilePath" | awk '/DIMM Inventory:/,/Total Memory*/')
+        mrcOutDimmStatus=$(cat "$mrcOutFilePath" | awk '/DIMM Status:/,/Disabled mem*/')
+        get-MrcOutInventory
+        get-MrcOutStatus
+    # TODO Get ADDDC Sparing information
+    fi
+
+}
+
+function get-ucsmDimmErrors (){
+    process-DimmBL    
+    processMrcOut
+}
+
+function get-systemInfo () {
     get-ucsmServerPID
     get-ucsmServerSerial
     get-ucsmCIMCVersion
     get-ucsmDimmErrors
-    #TODO Process DimmBL
     #TODO Process MrcOut
     #TODO Process OBFL
         #TODO Find Correctable and Uncorrectable errors
