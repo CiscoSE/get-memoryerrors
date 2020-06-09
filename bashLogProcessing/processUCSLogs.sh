@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 # Copyright (c) {{current_year}} Cisco and/or its affiliates.
 #
@@ -50,16 +50,11 @@ function exitRoutine () {
 function createWorkingDirectory (){
     #Does the working directory exist?
     writeStatus "Checking for $workingDirectory directory."
-    if [ -d $workingDirectory ]
-    then 
+    if [ -d $workingDirectory ];then 
         writeStatus "Working Directory Exists" "INFO"
         #Make sure it is empty.
-        writeStatus "Removing everything from working directory" "INFO"
-        rm -rf $workingDirectory/*
-        if [ $? != 0 ]; then
-            writeStatus "Could not clean up working directory" "FAIL"
-        fi
-        return
+        writeStatus "Removing working directory to ensure we start out clean" "INFO"
+        rm -rf $workingDirectory
     fi
 
     #If it isn't, create it
@@ -89,13 +84,7 @@ function writeStatus (){
 }
 
 function writeReport (){
-    printf "${1}\n" >> $memoryReportFileName
-}
-
-function writeboth (){
-    
-    writeReport "$1"
-    writeStatus "$1" "$2"
+    printf "${1}\n" >> "$reportDirectory/$serialNumber/$serialNumber-$2-$memoryReportDateTime.report"
 }
 
 function checkTarFile () {
@@ -117,21 +106,21 @@ function untarFile () {
 get-ucsmServerPID (){
     writeStatus "Processing Server Product ID"
     local ucsmServerPIDRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Board Product Name" {} \; | head -1)"
-    writeReport "$ucsmServerPIDRaw"
+    serverProperties="${ucsmServerPIDRaw}"
     writeStatus "Board Product Name(PID): $(echo $ucsmServerPIDRaw | cut -d ":" -f2 | xargs)"
 }
 
 get-ucsmServerSerial (){
     writeStatus "Processing Server Serial"
     local ucsmServerSerialRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Product Serial Number*${SerialNumber}" {} \; | head -1)"
-    writeReport "$ucsmServerSerialRaw"
+    serverProperties="$serverProperties\n$ucsmServerSerialRaw"
     writeStatus "Server Serial: $(echo $ucsmServerSerialRaw | cut -d ":" -f2 | xargs)"
 }
 
 get-ucsmCIMCVersion (){
     writeStatus "Processing Server CIMC Version"
     local ucsmServerVersionRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec zegrep -iE "ver:" {} \; | head -1)"
-    writeReport "$ucsmServerVersionRaw"
+    serverProperties="$serverProperties\n$ucsmServerVersionRaw"
     writeStatus "Server CIMC Firmware Version: $(echo $ucsmServerVersionRaw | cut -d ":" -f2 | xargs)"
 }
 returnDimmsWithErrors () {
@@ -151,7 +140,8 @@ reportDimmsWithErrors () {
         local uncorrectableErrTotal=$(echo "$line" | xargs | cut -d ' ' -f5) 
         local uncorrectableErrThisBoot=$(echo "$line" | xargs | cut -d ' ' -f6)
         writeStatus "DIMM $dimmWithErrors has errors" "WARN"
-        writeReport "\n\nDIMM $dimmWithErrors has errors"
+        writeReport "================ DIMM $dimmWithErrors Error Report ================" "$dimmWithErrors"
+        writeReport "################ Server Preperties ################\n$serverProperties\n################################################" "$dimmWithErrors"
         if [ ! -z $dimmWithErrors ]; then
             if [ -z $dimmsWithErrors ]; then
                 dimmsWithErrors="$dimmWithErrors"
@@ -160,13 +150,13 @@ reportDimmsWithErrors () {
             fi
         fi
         writeStatus "\tCorrectable Errors Total:\t$correctableErrTotal" "WARN"
-        writeReport "\tCorrectable Errors Total:\t$correctableErrTotal" 
+        writeReport "\tCorrectable Errors Total:\t$correctableErrTotal" "$dimmWithErrors"
         writeStatus "\tCorrectable Errors This Boot:\t$correctableErrThisBoot" "WARN"
-        writeReport "\tCorrectable Errors This Boot:\t$correctableErrThisBoot" 
-        writeStatus "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" "WARN"
-        writeReport "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" 
+        writeReport "\tCorrectable Errors This Boot:\t$correctableErrThisBoot" "$dimmWithErrors" 
+        writeStatus "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" "WARN" 
+        writeReport "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" "$dimmWithErrors"
         writeStatus "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "WARN"
-        writeReport "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot"        
+        writeReport "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "$dimmWithErrors"        
     done <<< "$1"
 }
 
@@ -185,9 +175,6 @@ writeStatus "Searching for DIMM Errors in DimmBL.log"
     returnDimmsWithErrors "${dimmErrorCountFullList}"
     reportDimmsWithErrors "$dimmsWithErrors"
 
-    printf "\n\n" >> $memoryReportFileName 
-    echo "$dimmErrorCountFullList" >> $memoryReportFileName
-    printf "\n\n" >> $memoryReportFileName
 }
 function get-MrcOutPathNormal (){
      mrcOutFilePath="$(find $workingDirectory -type f -iname "MrcOut.txt" | head -1)"
@@ -219,42 +206,55 @@ function locateMrcOut () {
 }
 
 function report-MrcOutInventory () {
-    writeStatus "Inventory for $dimm will be reported"
-    local mrcoutDimmManufacture="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f7 | xargs | cut -d " " -f1 | xargs)"
-    local mrcoutDimmSize="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f2 | xargs)"
-    local mrcoutDimmSpeed="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f6 | xargs)"
-    local mrcoutDimmSerial="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f10 | xargs)"
-    local mrcoutDimmVendorPID="$(echo "$thisDimmMrcOutInventory" | cut -d '|' -f11 | xargs)"
+    writeStatus "Inventory for $2 will be reported"
+
+    local mrcoutDimmManufacture="$(echo "$1" | cut -d '|' -f7 | xargs | cut -d " " -f1 | xargs)"
+    local mrcoutDimmSize="$(echo "$1" | cut -d '|' -f2 | xargs)"
+    local mrcoutDimmSpeed="$(echo "$1" | cut -d '|' -f6 | xargs)"
+    local mrcoutDimmSerial="$(echo "$1" | cut -d '|' -f10 | xargs)"
+    local mrcoutDimmVendorPID="$(echo "$1" | cut -d '|' -f11 | xargs)"
     
-    writeboth "====== MrcOut DIMM Data for $dimm ======"
-    writeboth "\tManufacture:\t$mrcoutDimmManufacture" "INFO"
-    writeboth "\tSize:\t\t$mrcoutDimmSize" "INFO"    
-    writeboth "\tSerial:\t\t$mrcoutDimmSerial" "INFO"
-    writeboth "\tVendor PID:\t$mrcoutDimmVendorPID" "INFO"
+    writeReport "====== MrcOut DIMM Data for $2 ======" "$2"
+    writeReport "\tManufacture:\t\t$mrcoutDimmManufacture" "$2"
+    writeReport "\tSize:\t\t\t$mrcoutDimmSize" "$2"    
+    writeReport "\tSerial:\t\t\t$mrcoutDimmSerial" "$2"
+    writeReport "\tVendor PID:\t\t$mrcoutDimmVendorPID" "$2"
+
+    writeStatus "====== MrcOut DIMM Data for $2 ======" "INFO"
+    writeStatus "\tManufacture:\t\t$mrcoutDimmManufacture"
+    writeStatus "\tSize:\t\t\t$mrcoutDimmSize" 
+    writeStatus "\tSerial:\t\t\t$mrcoutDimmSerial"
+    writeStatus "\tVendor PID:\t\t$mrcoutDimmVendorPID" 
 }
 
-function get-MrcOutInventory () {
-    writeStatus "Starting memory evaluation from MrcOut"
+report-mrcOutSettings(){
+    if [ -z "$1" ]; then
+        writeStatus "ADDDC Sparing and Post Package Repair not enabled"
+    else   
+        for line in $1; do 
+            local property="$(echo "$line" | cut -d ':' -f1 | xargs)"
+            local propVal="$(echo "$line" | cut -d ':' -f2 | xargs)"
+            writeStatus "\t$property:\t$propVal" "INFO"
+            writeReport "\t$property:\t$propVal" "$2"
+        done
+    fi
+}
+
+process-MrcOutForDimms (){
+    # Things that we woud need for every DIMM that has errors.
+    mrcOutDimmInventory=$(cat "$mrcOutFilePath" | awk '/DIMM Inventory:/,/Total Memory*/')
+    mrcOutDimmStatus=$(cat "$mrcOutFilePath" | awk '/DIMM Status:/,/Disabled Mem*/')
+    mrcOutDimmSettings=$(cat "$mrcOutFilePath" | egrep -iE "Select Memory RAS|Post Package Repair")
+
     for dimm in $dimmsWithErrors; do
-        thisDimmMrcOutInventory=''
-        # Looking to see if we can find that DIMM in the MrcOut file.
-        thisDimmMrcOutInventory="$(echo "$mrcOutDimmInventory" | egrep -iE "$dimm")"
-        if [ ! -z "$thisDimmMrcOutInventory" ]; then
-            report-MrcOutInventory $thisDimmMrcOutInventory
-        else
-            writeStatus "No Inventory for DIMM $dimm found"
-        fi
+        if [ ! -z "$mrcOutDimmInventory" ]; then report-MrcOutInventory "$(echo "$mrcOutDimmInventory" | egrep -iE "^$dimm" )" "$dimm"; fi
+        report-mrcOutSettings "${mrcOutDimmSettings}" "$dimm"
+        if [ ! -z "$mrcOutDimmStatus" ]; then writeReport "\n\n${mrcOutDimmStatus}" "$dimm"; fi
+
     done
-
-}
-function get-MrcOutStatus () {
-    # This is about looking for black listing.
-    writeStatus "Not really here yet... Work started" "FAIL"
-
-
 }
 
-function processMrcOut () {
+function process-MrcOut () {
     #If we can find it, we want to process it. In some cases it cannot be found.
     # This is false until we find it. If we don't find it we need to get the serial numbers
     # from the dimmsData folder, which is more difficult.
@@ -264,18 +264,57 @@ function processMrcOut () {
     if [ -z "$mrcOutFilePath" ];then
         writeStatus "MrcOut file was not found and cannot be processed" "WARN"
     else
-        mrcOutDimmInventory=$(cat "$mrcOutFilePath" | awk '/DIMM Inventory:/,/Total Memory*/')
-        mrcOutDimmStatus=$(cat "$mrcOutFilePath" | awk '/DIMM Status:/,/Disabled mem*/')
-        get-MrcOutInventory
-        get-MrcOutStatus
+        process-MrcOutForDimms
     # TODO Get ADDDC Sparing information
     fi
+}
 
+function get-obflUncorrectableErrors (){
+    writeStatus "\t====== OBFL Uncorrectable DIMM Data for $2 ======" "INFO"
+    writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $2 ======" "$2"
+
+    for line in "$1"; do 
+        local obflUncorrectableTimeStamp="$(echo "$line" | cut -d '|' -f2 | xargs )"
+        local obflUncorrectableSystemState="$(echo "$line" | cut -d '|' -f5 | cut -d ':' -f1 | xargs)"
+        local obflUncorrectableSystemError="$(echo "$line" | cut -d '|' -f6 | xargs)"
+
+        writeStatus "\t$obflUncorrectableTimeStamp\t\t$obflUncorrectableSystemState\t${obflUncorrectableSystemError}" "WARN"
+        writeReport "\t$obflUncorrectableTimeStamp\t\t$obflUncorrectableSystemState\t${obflUncorrectableSystemError}" "$2"
+    done
+    
+    writeReport "\t====== End Uncorrectable OBFL DIMM Data for $2 ======\n" "$2"
+}
+function get-obflCorrectableErrors (){
+    writeStatus "\t====== OBFL Correctable DIMM Data for $2 ======" "INFO"
+    writeReport "\t====== Start Correctable OBFL DIMM Data for $2 ======" "$2"
+
+    for line in "$1"; do 
+        local obflCorrectableTimeStamp="$(echo "$line" | cut -d '|' -f2 | xargs )"
+        local obflCorrectableSystemError="$(echo "$line" | cut -d '|' -f5 | xargs)"
+
+        writeStatus "\t$obflCorrectableTimeStamp\t\t$obflCorrectableSystemError" "WARN"
+        writeReport "\t$obflCorrectableTimeStamp\t\t$obflCorrectableSystemError" "$2"
+    done
+    
+    writeReport "\t====== End Correctable OBFL DIMM Data for $2 ======\n" "$2"
+}
+
+function process-obfl () {
+    # Find Correctable errors or CATERR and write them to the log file. 
+    writeStatus "Searching OBFl logs for errors" "INFO"
+    obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR" {} \;)"
+    for dimm in $dimmsWithErrors; do
+        #Find only OBFL log entries for DIMMs we are intrested in.
+        get-obflUncorrectableErrors "$(echo "$obflFirstPass" | egrep -iE "uncorrect.*${dimm}")" "$dimm"
+        get-obflCorrectableErrors "$(echo "$obflFirstPass" | egrep -iE " correctable ECC.*${dimm}")" "$dimm"
+    done
 }
 
 function get-ucsmDimmErrors (){
     process-DimmBL    
-    processMrcOut
+    process-MrcOut
+    process-obfl
+    
 }
 
 function get-systemInfo () {
@@ -302,25 +341,17 @@ function processTarFile () {
 
 function validateReportDirectory () {
     #Does the Report directory exist?
-    writeStatus "Checking for ${reportDirectory} directory."
-    if [ -d "$reportDirectory" ]
+    writeStatus "Checking for ${reportDirectory}/${serialNumber} directory."
+    if [ -d "${reportDirectory}/${serialNumber}" ]
     then 
         writeStatus "Report Directory Exists" "INFO"        
     else
         #If it doesn't, create it
-        writeStatus "Creating Report Directory: $reportDirectory"
-        mkdir $reportDirectory
+        writeStatus "Creating Report Directory: ${reportDirectory}/${serialNumber}"
+        mkdir -p "${reportDirectory}/${serialNumber}"
         if [ $? != 0 ]; then
             writeStatus "Could not create Report directory" "FAIL"
         fi
-    fi
-
-    writeStatus "Attempting to create report file" "INFO"
-    touch $memoryReportFileName
-    if [ $? != 0 ]; then
-        writeStatus "Unable to create report file" "FAIL"
-    else
-        writeStatus "Report File created" "INFO"
     fi
 }
 
@@ -377,7 +408,7 @@ then
 fi
 
 #Memory report file - Time Stamped
-memoryReportFileName="${reportDirectory}/$(date +%Y%m%d-%H%M%S)-MemoryReport.txt"
+memoryReportDateTime="$(date +%Y%m%d-%H%M%S)"
 writeStatus "Memory Report will be written here: ${memoryReportFileName}" "INFO"
 
 
