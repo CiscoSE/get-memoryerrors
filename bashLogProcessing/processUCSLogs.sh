@@ -347,10 +347,7 @@ function process-techSupport (){
                 writeStatus "========================================" "WARN"
             fi
         done <<< $adddcSparingEvents
-
     fi
-
-
 }
 
 function get-systemInfo () {
