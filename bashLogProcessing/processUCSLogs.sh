@@ -326,12 +326,40 @@ function process-obfl () {
     done
 }
 
+function process-techSupport (){
+    techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" | head -1)"
+    adddcSparingEvents="$(egrep -iE "adddc" "$techsupportFilePath")"
+    if [ ! -z "adddcSparingEvents" ]; then
+        writeStatus "\t====== Tech Support ADDDC Sparing Events ======"
+        while IFS= read -r line; do
+            # We have to figure out the DIMM for each event if we want this to work out properly.
+            adddcSparingDimm="$(echo "$line" | cut -d '|' -f6 | xargs | egrep -oE "[A-Z][1-3]\.$" | sed 's/\.$//')"
+            if [ ! -z "$adddcSparingDimm" ]; then
+                adddcSparingEventLimited="$(echo "$line" | cut -d '|' -f2,3,4,5,6 )"
+                writeStatus "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======" "WARN"
+                writeStatus "$adddcSparingEventLimited" "WARN"
+                writeReport "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======\n$adddcSparingEventLimited" "$adddcSparingDimm"
+            else
+                #we cannot write it to the disk report, write a big warning to the screen
+                writeStatus "========================================" "WARN"
+                writeStatus "| ADDDC Sparing Events were found, but |" "WARN"
+                writeStatus "| could not be associated with a DIMM  |" "WARN"
+                writeStatus "========================================" "WARN"
+            fi
+        done <<< $adddcSparingEvents
+
+    fi
+
+
+}
+
 function get-systemInfo () {
     get-ucsmServerPID
     get-ucsmServerSerial
     get-ucsmCIMCVersion
     process-DimmBL    
     process-MrcOut
+    process-techSupport
     process-obfl
     #TODO Process Eng if it exists
         #TODO How do we find ADDDC Sparing Issues?
