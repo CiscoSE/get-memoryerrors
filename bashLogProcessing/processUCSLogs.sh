@@ -273,14 +273,14 @@ function get-obflUncorrectableErrors (){
     writeStatus "\t====== OBFL Uncorrectable DIMM Data for $2 ======" "INFO"
     writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $2 ======" "$2"
 
-    for line in "$1"; do 
+    while IFS= read -r line; do
         local obflUncorrectableTimeStamp="$(echo "$line" | cut -d '|' -f2 | xargs )"
         local obflUncorrectableSystemState="$(echo "$line" | cut -d '|' -f5 | cut -d ':' -f1 | xargs)"
         local obflUncorrectableSystemError="$(echo "$line" | cut -d '|' -f6 | xargs)"
 
         writeStatus "\t$obflUncorrectableTimeStamp\t\t$obflUncorrectableSystemState\t${obflUncorrectableSystemError}" "WARN"
         writeReport "\t$obflUncorrectableTimeStamp\t\t$obflUncorrectableSystemState\t${obflUncorrectableSystemError}" "$2"
-    done
+    done <<< $1 
     
     writeReport "\t====== End Uncorrectable OBFL DIMM Data for $2 ======\n" "$2"
 }
@@ -288,15 +288,30 @@ function get-obflCorrectableErrors (){
     writeStatus "\t====== OBFL Correctable DIMM Data for $2 ======" "INFO"
     writeReport "\t====== Start Correctable OBFL DIMM Data for $2 ======" "$2"
 
-    for line in "$1"; do 
-        local obflCorrectableTimeStamp="$(echo "$line" | cut -d '|' -f2 | xargs )"
-        local obflCorrectableSystemError="$(echo "$line" | cut -d '|' -f5 | xargs)"
+    while IFS= read -r line; do
+        local obflCorrectableSystemError="$(echo "$line" | cut -d '|' -f2,5 | xargs)"
+        #echo "$line"
+        #exit
 
-        writeStatus "\t$obflCorrectableTimeStamp\t\t$obflCorrectableSystemError" "WARN"
-        writeReport "\t$obflCorrectableTimeStamp\t\t$obflCorrectableSystemError" "$2"
-    done
+        writeStatus "\t$obflCorrectableSystemError" "WARN"
+        writeReport "\t$obflCorrectableSystemError" "$2"
+    done <<< $1
     
     writeReport "\t====== End Correctable OBFL DIMM Data for $2 ======\n" "$2"
+}
+
+function get-obflCATERR (){
+    # CATERR log entires are rarely DIMM specific, so we will include these logs in every DIMM report.
+    writeStatus "\t====== OBFL CATERR Data ======" "INFO"
+    writeReport "\t====== Start CATERR OBFL ======" "$2"
+
+    while IFS= read -r line; do
+        local obflCATErr="$(echo "$line" | cut -d '|' -f2,3,4,5 | xargs )"
+        writeStatus "\t$obflCATErr" "WARN"
+        writeReport "\t$obflCATErr" "$2"
+    done <<< $1
+    
+    writeReport "\t====== End CATERR OBFL ======\n" "$2"
 }
 
 function process-obfl () {
@@ -305,8 +320,9 @@ function process-obfl () {
     obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR" {} \;)"
     for dimm in $dimmsWithErrors; do
         #Find only OBFL log entries for DIMMs we are intrested in.
-        get-obflUncorrectableErrors "$(echo "$obflFirstPass" | egrep -iE "uncorrect.*${dimm}")" "$dimm"
-        get-obflCorrectableErrors "$(echo "$obflFirstPass" | egrep -iE " correctable ECC.*${dimm}")" "$dimm"
+        get-obflUncorrectableErrors "$(echo "${obflFirstPass}" | egrep -iE "uncorrect.*${dimm}")" "$dimm"
+        get-obflCorrectableErrors "$( egrep -iE " correctable ECC" <<< $obflFirstPass | egrep -E "DIMM $dimm ")" "$dimm"
+        get-obflCATERR "$(echo "$obflFirstPass" | egrep -E "CATERR")" "$dimm"
     done
 }
 
