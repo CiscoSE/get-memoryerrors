@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-# Copyright (c) {{current_year}} Cisco and/or its affiliates.
+# Copyright (c) 2020 Cisco and/or its affiliates.
 #
 # This software is licensed to you under the terms of the Cisco Sample
 # Code License, Version 1.1 (the "License"). You may obtain a copy of the
@@ -326,22 +326,13 @@ function process-obfl () {
     done
 }
 
-function get-ucsmDimmErrors (){
-    process-DimmBL    
-    process-MrcOut
-    process-obfl
-    
-}
-
 function get-systemInfo () {
     get-ucsmServerPID
     get-ucsmServerSerial
     get-ucsmCIMCVersion
-    get-ucsmDimmErrors
-    #TODO Process MrcOut
-    #TODO Process OBFL
-        #TODO Find Correctable and Uncorrectable errors
-        #TODO Find CATERR if it exists
+    process-DimmBL    
+    process-MrcOut
+    process-obfl
     #TODO Process Eng if it exists
         #TODO How do we find ADDDC Sparing Issues?
     }
