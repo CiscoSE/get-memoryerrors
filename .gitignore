@@ -4,3 +4,5 @@ PowerShell/WorkingFolder*
 PowerShell/TACReport/*
 PowerShell/Processing/*
 PowerShell/ignoredFiles/*
+bashLogProcessing/Working/*
+bashLogProcessing/Reports/*
