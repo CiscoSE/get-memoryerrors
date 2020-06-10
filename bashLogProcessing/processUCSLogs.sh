@@ -287,9 +287,6 @@ function get-obflCorrectableErrors (){
 
     while IFS= read -r line; do
         local obflCorrectableSystemError="$(echo "$line" | cut -d '|' -f2,5 | xargs)"
-        #echo "$line"
-        #exit
-
         writeStatus "\t$obflCorrectableSystemError" "WARN"
         writeReport "\t$obflCorrectableSystemError" "$2"
     done <<< $1
