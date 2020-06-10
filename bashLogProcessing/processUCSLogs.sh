@@ -124,11 +124,10 @@ get-ucsmCIMCVersion (){
     writeStatus "Server CIMC Firmware Version: $(echo $ucsmServerVersionRaw | cut -d ":" -f2 | xargs)"
 }
 returnDimmsWithErrors () {
-    dimmsWithErrors="$(echo "$1" | egrep -ioE "[A-Z][0-9] \([0-9A-F]{2}\).*([1-9][0-9]*.*)" | sed -e 's/  */ /g')"
+    dimmsWithErrorsFull="$(echo "$1" | egrep -ioE "[A-Z][0-9] \([0-9A-F]{2}\).*([1-9][0-9]*.*)" | sed -e 's/  */ /g')"
 }
 
 reportDimmsWithErrors () {
-    dimmsWithErrors=''
     while IFS= read -r line; do
         correctableErrTotal=''
         correctableErrThisBoot=''
@@ -143,11 +142,7 @@ reportDimmsWithErrors () {
         writeReport "================ DIMM $dimmWithErrors Error Report ================" "$dimmWithErrors"
         writeReport "################ Server Preperties ################\n$serverProperties\n################################################" "$dimmWithErrors"
         if [ ! -z $dimmWithErrors ]; then
-            if [ -z $dimmsWithErrors ]; then
-                dimmsWithErrors="$dimmWithErrors"
-            else
-                dimmsWithErrors="$dimmsWithErrors$dimmWithErrors"
-            fi
+            dimmsWithErrors+=("$dimmWithErrors")
         fi
         writeStatus "\tCorrectable Errors Total:\t$correctableErrTotal" "WARN"
         writeReport "\tCorrectable Errors Total:\t$correctableErrTotal" "$dimmWithErrors"
@@ -172,10 +167,8 @@ writeStatus "Searching for DIMM Errors in DimmBL.log"
     
     writeStatus "DimmBL.log Location: $ucsmDimmBlFileLoc"
     local dimmErrorCountFullList="$(cat $ucsmDimmBlFileLoc | awk '/[-\s]*PER DIMM ERROR COUNTS/,/^ *$/')"
-    dimmsWithErrors=''
     returnDimmsWithErrors "${dimmErrorCountFullList}"
-    reportDimmsWithErrors "$dimmsWithErrors"
-
+    reportDimmsWithErrors "$dimmsWithErrorsFull"
 }
 function get-MrcOutPathNormal (){
      mrcOutFilePath="$(find $workingDirectory -type f -iname "MrcOut.txt" | head -1)"
@@ -248,12 +241,12 @@ process-MrcOutForDimms (){
     mrcOutDimmInventory=$(cat "$mrcOutFilePath" | awk '/DIMM Inventory:/,/Total Memory*/')
     mrcOutDimmStatus=$(cat "$mrcOutFilePath" | awk '/DIMM Status:/,/Disabled Mem*/')
     mrcOutDimmSettings=$(cat "$mrcOutFilePath" | egrep -iE "Select Memory RAS|Post Package Repair")
-
     for dimm in $dimmsWithErrors; do
-        if [ ! -z "$mrcOutDimmInventory" ]; then report-MrcOutInventory "$(echo "$mrcOutDimmInventory" | egrep -iE "^$dimm" )" "$dimm"; fi
+        if [ ! -z "$mrcOutDimmInventory" ]; then 
+            report-MrcOutInventory "$(echo "$mrcOutDimmInventory" | egrep -iE "^$dimm" )" "$dimm"
+        fi
         report-mrcOutSettings "${mrcOutDimmSettings}" "$dimm"
         if [ ! -z "$mrcOutDimmStatus" ]; then writeReport "\n\n${mrcOutDimmStatus}" "$dimm"; fi
-
     done
 }
 
@@ -334,8 +327,9 @@ function process-obfl () {
 
 function process-techSupport (){
     techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" | head -1)"
+    adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
     adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
-    if [ ! -z "adddcSparingEvents" ]; then
+    if [ $adddcSparingEventsCount -gt 0 ]; then
         writeStatus "\t====== Tech Support ADDDC Sparing Events ======"
         while IFS= read -r line; do
             # We have to figure out the DIMM for each event if we want this to work out properly.
@@ -452,6 +446,7 @@ fi
 memoryReportDateTime="$(date +%Y%m%d-%H%M%S)"
 writeStatus "Memory Report will be written here: ${memoryReportFileName}" "INFO"
 
+declare -a dimmsWithErrors
 
 validateReportDirectory
 createWorkingDirectory
