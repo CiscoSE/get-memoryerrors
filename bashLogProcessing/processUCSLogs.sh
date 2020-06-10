@@ -157,6 +157,7 @@ reportDimmsWithErrors () {
         writeReport "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" "$dimmWithErrors"
         writeStatus "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "WARN"
         writeReport "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "$dimmWithErrors"        
+        sleep 5s
     done <<< "$1"
 }
 
@@ -225,6 +226,7 @@ function report-MrcOutInventory () {
     writeStatus "\tSize:\t\t\t$mrcoutDimmSize" 
     writeStatus "\tSerial:\t\t\t$mrcoutDimmSerial"
     writeStatus "\tVendor PID:\t\t$mrcoutDimmVendorPID" 
+    sleep 5s
 }
 
 report-mrcOutSettings(){
@@ -237,6 +239,7 @@ report-mrcOutSettings(){
             writeStatus "\t$property:\t$propVal" "INFO"
             writeReport "\t$property:\t$propVal" "$2"
         done
+        sleep 5s
     fi
 }
 
@@ -283,6 +286,7 @@ function get-obflUncorrectableErrors (){
     done <<< $1 
     
     writeReport "\t====== End Uncorrectable OBFL DIMM Data for $2 ======\n" "$2"
+    sleep 5s
 }
 function get-obflCorrectableErrors (){
     writeStatus "\t====== OBFL Correctable DIMM Data for $2 ======" "INFO"
@@ -298,6 +302,7 @@ function get-obflCorrectableErrors (){
     done <<< $1
     
     writeReport "\t====== End Correctable OBFL DIMM Data for $2 ======\n" "$2"
+    sleep 5s
 }
 
 function get-obflCATERR (){
@@ -312,6 +317,7 @@ function get-obflCATERR (){
     done <<< $1
     
     writeReport "\t====== End CATERR OBFL ======\n" "$2"
+    sleep 5s
 }
 
 function process-obfl () {
@@ -328,7 +334,7 @@ function process-obfl () {
 
 function process-techSupport (){
     techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" | head -1)"
-    adddcSparingEvents="$(egrep -iE "adddc" "$techsupportFilePath")"
+    adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
     if [ ! -z "adddcSparingEvents" ]; then
         writeStatus "\t====== Tech Support ADDDC Sparing Events ======"
         while IFS= read -r line; do
@@ -339,12 +345,17 @@ function process-techSupport (){
                 writeStatus "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======" "WARN"
                 writeStatus "$adddcSparingEventLimited" "WARN"
                 writeReport "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======\n$adddcSparingEventLimited" "$adddcSparingDimm"
+                sleep 5s
             else
                 #we cannot write it to the disk report, write a big warning to the screen
+                writeStatus "$line" "WARN"
                 writeStatus "========================================" "WARN"
                 writeStatus "| ADDDC Sparing Events were found, but |" "WARN"
                 writeStatus "| could not be associated with a DIMM  |" "WARN"
+                writeStatus "| These are not written to the report  |" "WARN"
+                writeStatus "| files.                               |" "WARN"
                 writeStatus "========================================" "WARN"
+                sleep 10s
             fi
         done <<< $adddcSparingEvents
     fi
@@ -358,8 +369,6 @@ function get-systemInfo () {
     process-MrcOut
     process-techSupport
     process-obfl
-    #TODO Process Eng if it exists
-        #TODO How do we find ADDDC Sparing Issues?
     }
 
 function processTarFile () {
