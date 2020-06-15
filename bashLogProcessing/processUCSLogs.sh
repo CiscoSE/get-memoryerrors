@@ -366,6 +366,11 @@ function processTarFile () {
     #Many customers will send logs for way more servers then we need to evaluate.
     #We use the serial number to figure out which one we really need.
     serverTarFilePath=$(find "$workingDirectory" -iname "CIMC*.gz" -exec zegrep --with-filename -iE $serialNumber {} \; | cut -d " " -f3)
+    tarFilesReturned="$(echo "$serverTarFilePath" | wc -l)"
+    if [ "$tarFilesReturned" -gt 1 ] || [ "$tarFilesReturned" -eq 0 ]; then
+        writeStatus "Check your serial number. We find a single CIMC file with the serial number provided, but that isn't what we found." "FAIL"
+        exit
+    fi
     writeStatus "Processing: $serverTarFilePath" "INFO"
     untarFile $serverTarFilePath
     get-systemInfo
