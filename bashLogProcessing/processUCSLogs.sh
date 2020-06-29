@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # Copyright (c) 2020 Cisco and/or its affiliates.
 #
@@ -21,6 +21,8 @@ serialNumber=''     # We need the serial number to sort out the files
 workingDirectory='./Working'
 reportDirectory='./Reports'
 
+sleepTimer='0'
+
 argumentExit(){
   # Required for help processing
   printf '%s\n' "$1" >&2
@@ -37,13 +39,14 @@ showHelp() {
       --serialNumber        Serial number of server to be evaluated (Required)
       --workingDirectory    Directory where files will be temporarily moved to for processing.
       --ReportDirectory     Directory where finished report will be created.
+      --noReport            Prevents the Reports from by written. Used for debugging
       -v                    verbose mode. 
 EOF
 }
 
 function exitRoutine () {
   #Remove any remaining files from the Exit routine. 
-  rm -fr $workingDirectory/*
+  #rm -fr $workingDirectory/*
   exit
 }
 
@@ -54,7 +57,7 @@ function createWorkingDirectory (){
         writeStatus "Working Directory Exists" "INFO"
         #Make sure it is empty.
         writeStatus "Removing working directory to ensure we start out clean" "INFO"
-        rm -rf $workingDirectory
+        rm -rf "$workingDirectory"
     fi
 
     #If it isn't, create it
@@ -84,7 +87,16 @@ function writeStatus (){
 }
 
 function writeReport (){
-    printf "${1}\n" >> "$reportDirectory/$serialNumber/$serialNumber-$2-$memoryReportDateTime.report"
+    if [ "$noReport" = 'true' ]; then 
+        writeStatus "Report Not being Generated"
+        return 
+    fi
+    if [ -z $2 ]; then 
+        local dimmName='none'
+    else
+        local dimmName="$2"
+    fi
+    printf -- "${1}\n" >> "${reportDirectory}/${serialNumber}/${serialNumber}-${dimmName}-${memoryReportDateTime}.report"
 }
 
 function checkTarFile () {
@@ -98,28 +110,44 @@ function checkTarFile () {
 }
 
 function untarFile () {
+    writeStatus "Unpacking tar file: ${1}" "INFO"
+    writeStatus "Destination: ${workingDirectory}" "INFO"
     tar -xf "$1" -C "$workingDirectory"
     if [ $? != 0 ]; then
         writeStatus "Unable to extract TAR file " "FAIL"
     fi
 }
+get-techSupportFileName () {
+    writeStatus "Looking for TechSupport.txt files commonly found on blades" "INFO"
+    #Most blades fall into this catagory.
+    techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt")"
+    #Most Stand alone fall into this catagory
+    if [ -z "$techSupportFileName" ]; then
+        writeStatus "We didn't find TechSupport.txt. Looking for tech_support often found in C series" "INFO"
+        techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname 'tech_support')"
+    fi 
+    if [ -z $techSupportFileName ]; then
+        writeStatus "No Tech support file found" "FAIL"
+    fi
+    writeStatus "techSupport File Path: ${techSupportFileName}"
+}
 get-ucsmServerPID (){
     writeStatus "Processing Server Product ID"
-    local ucsmServerPIDRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Board Product Name" {} \; | head -1)"
+    local ucsmServerPIDRaw="$(egrep -iE 'Board Product Name' $techSupportFileName | head -1)"
     serverProperties="${ucsmServerPIDRaw}"
     writeStatus "Board Product Name(PID): $(echo $ucsmServerPIDRaw | cut -d ":" -f2 | xargs)"
 }
 
 get-ucsmServerSerial (){
     writeStatus "Processing Server Serial"
-    local ucsmServerSerialRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec egrep -iE "Product Serial Number*${SerialNumber}" {} \; | head -1)"
+    local ucsmServerSerialRaw="$(egrep -iE "Product Serial Number*${SerialNumber}" $techSupportFileName | head -1)"
     serverProperties="$serverProperties\n$ucsmServerSerialRaw"
     writeStatus "Server Serial: $(echo $ucsmServerSerialRaw | cut -d ":" -f2 | xargs)"
 }
 
 get-ucsmCIMCVersion (){
     writeStatus "Processing Server CIMC Version"
-    local ucsmServerVersionRaw="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt" -exec zegrep -iE "ver:" {} \; | head -1)"
+    local ucsmServerVersionRaw="$(egrep -iE "ver:" $techSupportFileName | head -1)"
     serverProperties="$serverProperties\n$ucsmServerVersionRaw"
     writeStatus "Server CIMC Firmware Version: $(echo $ucsmServerVersionRaw | cut -d ":" -f2 | xargs)"
 }
@@ -128,6 +156,16 @@ returnDimmsWithErrors () {
 }
 
 reportDimmsWithErrors () {
+    if [ -z "$1" ]; then
+        dimmsWithErrors+=("none")
+        writeStatus "No errors found in DimmBL log." "INFO"
+        writeStatus "Writting Server properties to generic log file." "INFO"
+        writeReport "################ Server Preperties ################\n$serverProperties\n################################################"
+        writeReport "================ DIMM Error Report From DimmBL Log ================"
+        writeStatus "Writing DimmBL error table to generic log file." "INFO"
+        writeReport "$dimmErrorCountFullList"
+        return
+    fi
     while IFS= read -r line; do
         correctableErrTotal=''
         correctableErrThisBoot=''
@@ -138,11 +176,11 @@ reportDimmsWithErrors () {
         local correctableErrThisBoot=$(echo "$line" | xargs | cut -d ' ' -f4)
         local uncorrectableErrTotal=$(echo "$line" | xargs | cut -d ' ' -f5) 
         local uncorrectableErrThisBoot=$(echo "$line" | xargs | cut -d ' ' -f6)
-        writeStatus "DIMM $dimmWithErrors has errors" "WARN"
-        writeReport "================ DIMM $dimmWithErrors Error Report ================" "$dimmWithErrors"
         writeReport "################ Server Preperties ################\n$serverProperties\n################################################" "$dimmWithErrors"
-        if [ ! -z $dimmWithErrors ]; then
-            dimmsWithErrors+=("$dimmWithErrors")
+        if [ ! -z "$dimmWithErrors" ]; then
+            dimmsWithErrors+=("${dimmWithErrors}")
+            writeStatus "DIMM $dimmWithErrors has errors" "WARN"
+            writeReport "================ DIMM $dimmWithErrors Error Report ================" "$dimmWithErrors"
         fi
         writeStatus "\tCorrectable Errors Total:\t$correctableErrTotal" "WARN"
         writeReport "\tCorrectable Errors Total:\t$correctableErrTotal" "$dimmWithErrors"
@@ -152,26 +190,27 @@ reportDimmsWithErrors () {
         writeReport "\tUncorrectable Errors Total:\t$uncorrectableErrTotal" "$dimmWithErrors"
         writeStatus "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "WARN"
         writeReport "\tUncorrectable Errors This Boot:\t$uncorrectableErrThisBoot" "$dimmWithErrors"        
-        sleep 5s
+        sleep "${sleepTimer}s"
     done <<< "$1"
+    # Some DIMM errors are not correctable or uncorrectable, and we still need to report System Related entires
 }
 
 process-DimmBL (){
 writeStatus "Searching for DIMM Errors in DimmBL.log"
     #Location is not stable, so we search broadly in var
-    local ucsmDimmBlFileLoc="$(find "${workingDirectory}/var" -type f -iname "DimmBL.log" | head -1)"
+    local ucsmDimmBlFileLoc="$(find "${workingDirectory}/var" -type f -iname "DimmBL.log" -o -iname "DIMM-BL_Status.txt" | head -1)"
     if [ -z $ucsmDimmBlFileLoc ];then
         writeStatus "DimmBL.log Location not found. No reporting from this file is possible" "WARN"
         return
     fi
     
     writeStatus "DimmBL.log Location: $ucsmDimmBlFileLoc"
-    local dimmErrorCountFullList="$(cat $ucsmDimmBlFileLoc | awk '/[-\s]*PER DIMM ERROR COUNTS/,/^ *$/')"
+    dimmErrorCountFullList="$(cat $ucsmDimmBlFileLoc | awk '/[-\s]*PER DIMM ERROR COUNTS/,/^ *$/')"
     returnDimmsWithErrors "${dimmErrorCountFullList}"
     reportDimmsWithErrors "$dimmsWithErrorsFull"
 }
 function get-MrcOutPathNormal (){
-     mrcOutFilePath="$(find $workingDirectory -type f -iname "MrcOut.txt" | head -1)"
+     mrcOutFilePath="$(find $workingDirectory -type f -iname "MrcOut.txt" -o -iname MrcOut | head -1)"
 }
 function get-MrcOutPathNv (){
     # Looking for the MrcOut file within the nvram gz file normally found in ./tmp/
@@ -219,31 +258,33 @@ function report-MrcOutInventory () {
     writeStatus "\tSize:\t\t\t$mrcoutDimmSize" 
     writeStatus "\tSerial:\t\t\t$mrcoutDimmSerial"
     writeStatus "\tVendor PID:\t\t$mrcoutDimmVendorPID" 
-    sleep 5s
+    sleep "${sleepTimer}s"
 }
 
 report-mrcOutSettings(){
     if [ -z "$1" ]; then
         writeStatus "ADDDC Sparing and Post Package Repair not enabled"
-    else   
-        for line in $1; do 
+    else 
+        while IFS= read -r line; do 
             local property="$(echo "$line" | cut -d ':' -f1 | xargs)"
             local propVal="$(echo "$line" | cut -d ':' -f2 | xargs)"
             writeStatus "\t$property:\t$propVal" "INFO"
             writeReport "\t$property:\t$propVal" "$2"
-        done
-        sleep 5s
+        done <<< "$1"   
+        sleep "${sleepTimer}s"
     fi
 }
 
 process-MrcOutForDimms (){
-    # Things that we woud need for every DIMM that has errors.
+    # Things that we would need for every DIMM that has errors.
     mrcOutDimmInventory=$(cat "$mrcOutFilePath" | awk '/DIMM Inventory:/,/Total Memory*/')
     mrcOutDimmStatus=$(cat "$mrcOutFilePath" | awk '/DIMM Status:/,/Disabled Mem*/')
     mrcOutDimmSettings=$(cat "$mrcOutFilePath" | egrep -iE "Select Memory RAS|Post Package Repair")
-    for dimm in $dimmsWithErrors; do
-        if [ ! -z "$mrcOutDimmInventory" ]; then 
+    for dimm in "${dimmsWithErrors[@]}"; do
+        if [ ! -z "$mrcOutDimmInventory" ] && [ "$dimm" != "none" ]; then 
             report-MrcOutInventory "$(echo "$mrcOutDimmInventory" | egrep -iE "^$dimm" )" "$dimm"
+        else
+            writeReport "\n\n$mrcOutDimmInventory"
         fi
         report-mrcOutSettings "${mrcOutDimmSettings}" "$dimm"
         if [ ! -z "$mrcOutDimmStatus" ]; then writeReport "\n\n${mrcOutDimmStatus}" "$dimm"; fi
@@ -261,65 +302,101 @@ function process-MrcOut () {
         writeStatus "MrcOut file was not found and cannot be processed" "WARN"
     else
         process-MrcOutForDimms
-    # TODO Get ADDDC Sparing information
     fi
 }
 
-function get-obflUncorrectableErrors (){
-    writeStatus "\t====== OBFL Uncorrectable DIMM Data for $2 ======" "INFO"
-    writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $2 ======" "$2"
-
-    while IFS= read -r line; do
-        local obflUncorrectableTimeStamp="$(echo "$line" | cut -d '|' -f2 | xargs )"
-        local obflUncorrectableSystemState="$(echo "$line" | cut -d '|' -f5 | cut -d ':' -f1 | xargs)"
-        local obflUncorrectableSystemError="$(echo "$line" | cut -d '|' -f6 | xargs)"
-
-        writeStatus "\t$obflUncorrectableTimeStamp\t\t$obflUncorrectableSystemState\t${obflUncorrectableSystemError}" "WARN"
-        writeReport "\t$obflUncorrectableTimeStamp\t\t$obflUncorrectableSystemState\t${obflUncorrectableSystemError}" "$2"
-    done <<< $1 
-    
-    writeReport "\t====== End Uncorrectable OBFL DIMM Data for $2 ======\n" "$2"
-    sleep 5s
-}
-function get-obflCorrectableErrors (){
-    writeStatus "\t====== OBFL Correctable DIMM Data for $2 ======" "INFO"
-    writeReport "\t====== Start Correctable OBFL DIMM Data for $2 ======" "$2"
-
-    while IFS= read -r line; do
-        local obflCorrectableSystemError="$(echo "$line" | cut -d '|' -f2,5 | xargs)"
-        writeStatus "\t$obflCorrectableSystemError" "WARN"
-        writeReport "\t$obflCorrectableSystemError" "$2"
-    done <<< $1
-    
-    writeReport "\t====== End Correctable OBFL DIMM Data for $2 ======\n" "$2"
-    sleep 5s
+function write-ToEachDimmReport () {
+    for dimm in "$dimmsWithErrors[@]"; do
+        writeReport "$1" "$dimm"
+    done
 }
 
-function get-obflCATERR (){
-    # CATERR log entires are rarely DIMM specific, so we will include these logs in every DIMM report.
-    writeStatus "\t====== OBFL CATERR Data ======" "INFO"
-    writeReport "\t====== Start CATERR OBFL ======" "$2"
+function process-obflCorrectableErrors () {
+    local correctableErrorList=("$@")
+    if [ -z "$correctableErrorList" ]; then
+        #write to each log that no entries were found.
+        local statusMessage1="---------- No Correctable errors found in obfl logs ----------"
+        write-ToEachDimmReport "$statusMessage1"
+        writeStatus $statusMessage1
+        return
+    fi
+    for dimm in "${dimmsWithErrors[@]}"; do
+        writeStatus "\t====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
+        writeReport "\t====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
+        writeStatus "Looking for OBFL Errors for $dimm"
+        for line in "${correctableErrorList[@]}"; do
+            if echo "$line" | egrep -qE "DIMM $dimm"; then
+                writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
+                writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
+            fi
+        done
+    done
+}
 
-    while IFS= read -r line; do
-        local obflCATErr="$(echo "$line" | cut -d '|' -f2,3,4,5 | xargs )"
-        writeStatus "\t$obflCATErr" "WARN"
-        writeReport "\t$obflCATErr" "$2"
-    done <<< $1
-    
-    writeReport "\t====== End CATERR OBFL ======\n" "$2"
-    sleep 5s
+function process-obflUncorrectableErrors () {
+    local uncorrectableErrorList=("$@")
+    if [ -z "$uncorrectableErrorList" ]; then
+        #write to each log that no entries were found.
+        local statusMessage1="---------- No Correctable errors found in obfl logs ----------"
+        write-ToEachDimmReport "$statusMessage1"
+        writeStatus $statusMessage1
+        return
+    fi
+    for dimm in "${dimmsWithErrors[@]}"; do
+        writeStatus "\t====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
+        writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
+        for line in "${uncorrectableErrorList[@]}"; do
+            if echo "$line" | egrep -qE "DIMM $dimm"; then
+                writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
+                writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
+            fi
+        done
+    done
+}
+
+function process-obflCaterr () {
+    local caterrList=("$@")
+    if [ -z "$caterrList" ]; then
+        #write to each log that no entries were found.
+        local statusMessage1="---------- No CATERR errors found in obfl logs ----------"
+        write-ToEachDimmReport "$statusMessage1"
+        writeStatus $statusMessage1
+        return
+    fi
+    writeStatus "\t====== OBFL CATERR Data ======" "WARN"
+    writeReport "\t====== Start CATERR Data ======" "$dimm"
+    for line in "${caterrList[@]}"; do
+        writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
+        for dimm in "${dimmsWithErrors[@]}"; do
+            writeReport "\t$(echo "$line" | cut -d '|' -f2,3,4,5)" "$dimm"
+        done
+    done
 }
 
 function process-obfl () {
+        declare -a obflCorrectableList
+        declare -a obflUncorrectableList
+        declare -a obflCaterrList
     # Find Correctable errors or CATERR and write them to the log file. 
     writeStatus "Searching OBFl logs for errors" "INFO"
-    obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR" {} \;)"
-    for dimm in $dimmsWithErrors; do
-        #Find only OBFL log entries for DIMMs we are intrested in.
-        get-obflUncorrectableErrors "$(echo "${obflFirstPass}" | egrep -iE "uncorrect.*${dimm}")" "$dimm"
-        get-obflCorrectableErrors "$( egrep -iE " correctable ECC" <<< $obflFirstPass | egrep -E "DIMM $dimm ")" "$dimm"
-        get-obflCATERR "$(echo "$obflFirstPass" | egrep -E "CATERR")" "$dimm"
-    done
+    local obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR" {} \;)"
+    writeStatus "OBFL lines found:    $(echo "$obflFirstPass" | wc -l)\n"
+    # Break down each set of logs into its own variable.
+    while IFS= read -r line; do
+        if echo "$line" | egrep -qiE " correctable ECC"; then 
+            obflCorrectableList+=("${line}")
+        fi
+        if echo "$line" | egrep -qiE "uncorrectable"; then 
+            obflUncorrectableList+="${line}" 
+        fi
+        if echo "$line" | egrep -qiE "CATERR"; then 
+            obflCaterrList+="${line}"
+        fi
+    done <<< "${obflFirstPass}"
+    
+    process-obflCorrectableErrors "${obflCorrectableList[@]}"
+    process-obflUncorrectableErrors "${obflUncorrectableList[@]}"
+    process-obflCaterr "${obflCaterrList[@]}"
 }
 
 function process-techSupport (){
@@ -330,29 +407,26 @@ function process-techSupport (){
         writeStatus "\t====== Tech Support ADDDC Sparing Events ======"
         while IFS= read -r line; do
             # We have to figure out the DIMM for each event if we want this to work out properly.
-            adddcSparingDimm="$(echo "$line" | cut -d '|' -f6 | xargs | egrep -oE "[A-Z][1-3]\.$" | sed 's/\.$//')"
+            adddcSparingDimm="$(echo "$line" | cut -d '|' -f6 | egrep -oE "[A-Z][1-3]\.$" | sed 's/\.$//')"
             if [ ! -z "$adddcSparingDimm" ]; then
+                #TODO What if the DIMM we find is not a DIMM we have found previously?
                 adddcSparingEventLimited="$(echo "$line" | cut -d '|' -f2,3,4,5,6 )"
                 writeStatus "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======" "WARN"
                 writeStatus "$adddcSparingEventLimited" "WARN"
                 writeReport "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======\n$adddcSparingEventLimited" "$adddcSparingDimm"
-                sleep 5s
+                sleep "${sleepTimer}s"
             else
-                #we cannot write it to the disk report, write a big warning to the screen
-                writeStatus "$line" "WARN"
-                writeStatus "========================================" "WARN"
-                writeStatus "| ADDDC Sparing Events were found, but |" "WARN"
-                writeStatus "| could not be associated with a DIMM  |" "WARN"
-                writeStatus "| These are not written to the report  |" "WARN"
-                writeStatus "| files.                               |" "WARN"
-                writeStatus "========================================" "WARN"
-                sleep 10s
+                writeStatus "Dimm specific data not found - Writing to all Dimm Reports" "WARN"
+                for dimm in "${dimmsWithErrors[@]}"; do
+                    writeReport "$line" "$dimm"
+                done
             fi
         done <<< $adddcSparingEvents
     fi
 }
 
 function get-systemInfo () {
+    get-techSupportFileName
     get-ucsmServerPID
     get-ucsmServerSerial
     get-ucsmCIMCVersion
@@ -365,9 +439,11 @@ function get-systemInfo () {
 function processTarFile () {
     #Many customers will send logs for way more servers then we need to evaluate.
     #We use the serial number to figure out which one we really need.
-    serverTarFilePath=$(find "$workingDirectory" -iname "CIMC*.gz" -exec zegrep --with-filename -iE $serialNumber {} \; | cut -d " " -f3)
+    writeStatus "Processing tar.gz files" "INFO"
+    serverTarFilePath=$(find "$workingDirectory" -iname "C*.tar.gz" -exec zegrep --with-filename -iE $serialNumber {} \; | cut -d " " -f3)
     tarFilesReturned="$(echo "$serverTarFilePath" | wc -l)"
-    if [ "$tarFilesReturned" -gt 1 ] || [ "$tarFilesReturned" -eq 0 ]; then
+    if [ "$tarFilesReturned" -ne 1 ]; then
+        writeStatus "Returned File Count for tar.gz files is: ${tarFilesReturned}" "INFO"
         writeStatus "Check your serial number. We find a single CIMC file with the serial number provided, but that isn't what we found." "FAIL"
         exit
     fi
@@ -428,6 +504,10 @@ while :; do
 				shift
 		  fi
 		  ;;
+        --[Nn]o[rR]eport)
+              noReport="true"
+                shift
+          ;;
 		-v|--verbose)
 		  verbose=$((verbose + 1))
 		  ;;
@@ -452,6 +532,10 @@ declare -a dimmsWithErrors
 
 validateReportDirectory
 createWorkingDirectory
-checkTarFile
-untarFile "$tarFileName"
+if [ ${tarFileName: -4} = '.tar' ]; then
+    checkTarFile
+    untarFile "$tarFileName"
+elif [ ${tarFileName: -3} = 'tar.gz' ]; then
+    cp "$tarFileName" "$workingDirectory"
+fi
 processTarFile
