@@ -321,15 +321,23 @@ function process-obflCorrectableErrors () {
         return
     fi
     for dimm in "${dimmsWithErrors[@]}"; do
-        writeStatus "\t====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
-        writeReport "\t====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
-        writeStatus "Looking for OBFL Errors for $dimm"
-        for line in "${correctableErrorList[@]}"; do
-            if echo "$line" | egrep -qE "DIMM $dimm"; then
+        if [ "$dimm" = "none" ]; then
+            writeStatus "\t====== OBFL Correctable DIMM Data ======" "INFO"
+            writeReport "\t====== Start Correctable OBFL DIMM Data ======" "$dimm"
+            for line in "${correctableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
-            fi
-        done
+            done
+        else
+            writeStatus "\t====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
+            writeReport "\t====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
+            for line in "${correctableErrorList[@]}"; do
+                if echo "$line" | egrep -qE "DIMM $dimm"; then
+                    writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
+                    writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
+                fi
+            done
+        fi
     done
 }
 
@@ -343,14 +351,23 @@ function process-obflUncorrectableErrors () {
         return
     fi
     for dimm in "${dimmsWithErrors[@]}"; do
-        writeStatus "\t====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
-        writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
-        for line in "${uncorrectableErrorList[@]}"; do
-            if echo "$line" | egrep -qE "DIMM $dimm"; then
+        if [ "$dimm" = "none" ]; then
+            writeStatus "\t====== OBFL Uncorrectable DIMM Data ======" "INFO"
+            writeReport "\t====== Start Uncorrectable OBFL DIMM Data ======" "$dimm"
+            for line in "${uncorrectableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
-            fi
-        done
+            done
+        else
+            writeStatus "\t====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
+            writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
+            for line in "${uncorrectableErrorList[@]}"; do
+                if echo "$line" | egrep -qE "DIMM $dimm"; then
+                    writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
+                    writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
+                fi
+            done
+        fi
     done
 }
 
