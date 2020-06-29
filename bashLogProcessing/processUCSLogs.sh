@@ -306,8 +306,8 @@ function process-MrcOut () {
 }
 
 function write-ToEachDimmReport () {
-    for dimm in "$dimmsWithErrors[@]"; do
-        writeReport "$1" "$dimm"
+    for dimm in "${dimmsWithErrors[@]}"; do
+        writeReport "$1" "${dimm}"
     done
 }
 
@@ -337,7 +337,7 @@ function process-obflUncorrectableErrors () {
     local uncorrectableErrorList=("$@")
     if [ -z "$uncorrectableErrorList" ]; then
         #write to each log that no entries were found.
-        local statusMessage1="---------- No Correctable errors found in obfl logs ----------"
+        local statusMessage1="---------- No Uncorrectable errors found in obfl logs ----------"
         write-ToEachDimmReport "$statusMessage1"
         writeStatus $statusMessage1
         return
