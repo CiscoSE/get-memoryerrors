@@ -323,14 +323,14 @@ function process-obflCorrectableErrors () {
     for dimm in "${dimmsWithErrors[@]}"; do
         if [ "$dimm" = "none" ]; then
             writeStatus "\t====== OBFL Correctable DIMM Data ======" "INFO"
-            writeReport "====== Start Correctable OBFL DIMM Data ======" "$dimm"
+            writeReport "\n====== Start Correctable OBFL DIMM Data ======" "$dimm"
             for line in "${correctableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
             done
         else
             writeStatus "\t====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
-            writeReport "====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
+            writeReport "\n====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
             for line in "${correctableErrorList[@]}"; do
                 if echo "$line" | egrep -qE "DIMM $dimm"; then
                     writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
@@ -561,5 +561,7 @@ if [ ${tarFileName: -4} = '.tar' ]; then
     untarFile "$tarFileName"
 elif [ ${tarFileName: -3} = 'tar.gz' ]; then
     cp "$tarFileName" "$workingDirectory"
+else
+    writeStatus "File must end in .tar or .tar.gz, or we wont process it." "FAIL"
 fi
 processTarFile
