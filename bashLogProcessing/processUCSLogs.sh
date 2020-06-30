@@ -323,14 +323,14 @@ function process-obflCorrectableErrors () {
     for dimm in "${dimmsWithErrors[@]}"; do
         if [ "$dimm" = "none" ]; then
             writeStatus "\t====== OBFL Correctable DIMM Data ======" "INFO"
-            writeReport "\t====== Start Correctable OBFL DIMM Data ======" "$dimm"
+            writeReport "====== Start Correctable OBFL DIMM Data ======" "$dimm"
             for line in "${correctableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
             done
         else
             writeStatus "\t====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
-            writeReport "\t====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
+            writeReport "====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
             for line in "${correctableErrorList[@]}"; do
                 if echo "$line" | egrep -qE "DIMM $dimm"; then
                     writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
@@ -353,14 +353,14 @@ function process-obflUncorrectableErrors () {
     for dimm in "${dimmsWithErrors[@]}"; do
         if [ "$dimm" = "none" ]; then
             writeStatus "\t====== OBFL Uncorrectable DIMM Data ======" "INFO"
-            writeReport "\t====== Start Uncorrectable OBFL DIMM Data ======" "$dimm"
+            writeReport "====== Start Uncorrectable OBFL DIMM Data ======" "$dimm"
             for line in "${uncorrectableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "$dimm"
             done
         else
             writeStatus "\t====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
-            writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
+            writeReport "====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
             for line in "${uncorrectableErrorList[@]}"; do
                 if echo "$line" | egrep -qE "DIMM $dimm"; then
                     writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "WARN"
@@ -420,26 +420,33 @@ function process-techSupport (){
     techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
     adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
     adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
-    if [ $adddcSparingEventsCount -gt 0 ]; then
-        writeStatus "\t====== Tech Support ADDDC Sparing Events ======"
-        while IFS= read -r line; do
-            # We have to figure out the DIMM for each event if we want this to work out properly.
-            adddcSparingDimm="$(echo "$line" | cut -d '|' -f6 | egrep -oE "[A-Z][1-3]\.$" | sed 's/\.$//')"
-            if [ ! -z "$adddcSparingDimm" ]; then
-                #TODO What if the DIMM we find is not a DIMM we have found previously?
-                adddcSparingEventLimited="$(echo "$line" | cut -d '|' -f2,3,4,5,6 )"
-                writeStatus "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======" "WARN"
-                writeStatus "$adddcSparingEventLimited" "WARN"
-                writeReport "====== Dimm $adddcSparingDimm has ADDDC Sparing Events ======\n$adddcSparingEventLimited" "$adddcSparingDimm"
-                sleep "${sleepTimer}s"
-            else
-                writeStatus "Dimm specific data not found - Writing to all Dimm Reports" "WARN"
-                for dimm in "${dimmsWithErrors[@]}"; do
-                    writeReport "$line" "$dimm"
-                done
-            fi
-        done <<< $adddcSparingEvents
-    fi
+    writeStatus "========== ADDDC /PPR Events from Tech Support Log =========="
+    write-ToEachDimmReport "\n========== ADDDC / PPR Events from Tech Support Log ==========\n"
+    #Every line needs to go somoewhere. Either to a file it belongs to, or to every file we are writting to.
+    while IFS= read -r line; do
+        lineWritten="false"
+        if [ "${dimmsWithErrors[0]}" = "none" ] && [ $adddcSparingEventsCount -gt 0 ];then
+            #If none is reported in dimmsWithErrors, write it to done and move on
+            writeStatus "\t$(echo "$line" | cut -d '|' -f 2,3,4,5,6)"
+            writeReport "$(echo "$line" | cut -d '|' -f 2,3,4,5,6)" "none"
+            lineWritten="true"
+        fi
+        if [ $lineWritten = "false" ] && [ $adddcSparingEventsCount -gt 0 ]; then
+            #if the ADDDC / PPR event can be matched to a DIMM showing errors, we  report it only in that file.
+            for dimm in "${dimmsWithErrors[@]}"; do
+                if echo "$line" | egrep -qiE "$dimm"; then
+                    writeStatus "\t$(echo "$line" | cut -d '|' -f 2,3,4,5,6)"
+                    writeReport "$(echo "$line" | cut -d '|' -f 2,3,4,5,6)" "$dimm"
+                    lineWritten="true"
+                fi
+            done
+        fi
+        if [ $lineWritten = "false" ] && [ $adddcSparingEventsCount -gt 0 ]; then
+            # if the ADDDC / PPR event cannot be associated to a DIMM, then write the event to all DIMM file reports
+            writeStatus "\t$(echo "$line" | cut -d '|' -f 2,3,4,5,6)"
+            write-ToEachDimmReport "$(echo "$line" | cut -d '|' -f 2,3,4,5,6)"
+        fi
+    done <<< "${adddcSparingEvents}"
 }
 
 function get-systemInfo () {
