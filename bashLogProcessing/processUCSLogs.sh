@@ -355,16 +355,16 @@ function process-obflUncorrectableErrors () {
             writeStatus "\t====== OBFL Uncorrectable DIMM Data ======" "INFO"
             writeReport "\t====== Start Uncorrectable OBFL DIMM Data ======" "$dimm"
             for line in "${uncorrectableErrorList[@]}"; do
-                writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
-                writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
+                writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "WARN"
+                writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "$dimm"
             done
         else
             writeStatus "\t====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
             writeReport "\t====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
             for line in "${uncorrectableErrorList[@]}"; do
                 if echo "$line" | egrep -qE "DIMM $dimm"; then
-                    writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
-                    writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
+                    writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "WARN"
+                    writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "$dimm"
                 fi
             done
         fi
@@ -376,8 +376,8 @@ function process-obflCaterr () {
     if [ -z "$caterrList" ]; then
         #write to each log that no entries were found.
         local statusMessage1="---------- No CATERR errors found in obfl logs ----------"
-        write-ToEachDimmReport "$statusMessage1"
-        writeStatus $statusMessage1
+        write-ToEachDimmReport "$statusMessage1\n\n"
+        writeStatus "$statusMessage1"
         return
     fi
     writeStatus "\t====== OBFL CATERR Data ======" "WARN"
@@ -417,7 +417,7 @@ function process-obfl () {
 }
 
 function process-techSupport (){
-    techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" | head -1)"
+    techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
     adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
     adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
     if [ $adddcSparingEventsCount -gt 0 ]; then
