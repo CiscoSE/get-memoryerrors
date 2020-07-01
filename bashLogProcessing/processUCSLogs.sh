@@ -21,7 +21,7 @@ serialNumber=''     # We need the serial number to sort out the files
 workingDirectory='./Working'
 reportDirectory='./Reports'
 
-sleepTimer='0'
+sleepTimer='5'
 
 argumentExit(){
   # Required for help processing
@@ -316,20 +316,20 @@ function process-obflCorrectableErrors () {
     if [ -z "$correctableErrorList" ]; then
         #write to each log that no entries were found.
         local statusMessage1="---------- No Correctable errors found in obfl logs ----------"
-        write-ToEachDimmReport "$statusMessage1"
-        writeStatus $statusMessage1
+        write-ToEachDimmReport "\n$statusMessage1\n"
+        writeStatus "$statusMessage1"
         return
     fi
     for dimm in "${dimmsWithErrors[@]}"; do
         if [ "$dimm" = "none" ]; then
-            writeStatus "\t====== OBFL Correctable DIMM Data ======" "INFO"
+            writeStatus "====== OBFL Correctable DIMM Data ======" "INFO"
             writeReport "\n====== Start Correctable OBFL DIMM Data ======" "$dimm"
             for line in "${correctableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5)" "$dimm"
             done
         else
-            writeStatus "\t====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
+            writeStatus "====== OBFL Correctable DIMM Data for $dimm ======" "INFO"
             writeReport "\n====== Start Correctable OBFL DIMM Data for $dimm ======" "$dimm"
             for line in "${correctableErrorList[@]}"; do
                 if echo "$line" | egrep -qE "DIMM $dimm"; then
@@ -346,23 +346,23 @@ function process-obflUncorrectableErrors () {
     if [ -z "$uncorrectableErrorList" ]; then
         #write to each log that no entries were found.
         local statusMessage1="---------- No Uncorrectable errors found in obfl logs ----------"
-        write-ToEachDimmReport "$statusMessage1"
-        writeStatus $statusMessage1
+        write-ToEachDimmReport "\n$statusMessage1\n"
+        writeStatus "$statusMessage1"
         return
     fi
     for dimm in "${dimmsWithErrors[@]}"; do
         if [ "$dimm" = "none" ]; then
-            writeStatus "\t====== OBFL Uncorrectable DIMM Data ======" "INFO"
+            writeStatus "====== OBFL Uncorrectable DIMM Data ======" "INFO"
             writeReport "====== Start Uncorrectable OBFL DIMM Data ======" "$dimm"
             for line in "${uncorrectableErrorList[@]}"; do
                 writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "WARN"
                 writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "$dimm"
             done
         else
-            writeStatus "\t====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
+            writeStatus "====== OBFL Uncorrectable DIMM Data for $dimm ======" "INFO"
             writeReport "====== Start Uncorrectable OBFL DIMM Data for $dimm ======" "$dimm"
             for line in "${uncorrectableErrorList[@]}"; do
-                if echo "$line" | egrep -qE "DIMM $dimm"; then
+                if echo "$line" | egrep -qE "DIMM $dimm|${dimm}_ECC"; then
                     writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "WARN"
                     writeReport "\t$(echo $line | cut -d '|' -f2,3,4,5,6)" "$dimm"
                 fi
@@ -376,16 +376,21 @@ function process-obflCaterr () {
     if [ -z "$caterrList" ]; then
         #write to each log that no entries were found.
         local statusMessage1="---------- No CATERR errors found in obfl logs ----------"
-        write-ToEachDimmReport "$statusMessage1\n\n"
+        write-ToEachDimmReport "\n$statusMessage1\n\n"
         writeStatus "$statusMessage1"
         return
     fi
-    writeStatus "\t====== OBFL CATERR Data ======" "WARN"
-    writeReport "\t====== Start CATERR Data ======" "$dimm"
+    writeStatus "====== OBFL CATERR Data ======" "WARN"
+    write-ToEachDimmReport "====== Start CATERR Data ======"
     for line in "${caterrList[@]}"; do
-        writeStatus "\t$(echo $line | cut -d '|' -f2,3,4,5)" "WARN"
+        if echo "$line" | grep -q '|' ; then
+            caterrLine="\t$(echo $line | cut -d '|' -f2,3,4,5)"
+        else
+            caterrLine="$line"
+        fi
+        writeStatus "${caterrLine}" "WARN"
         for dimm in "${dimmsWithErrors[@]}"; do
-            writeReport "\t$(echo "$line" | cut -d '|' -f2,3,4,5)" "$dimm"
+            writeReport "\t${caterrLine}" "$dimm"
         done
     done
 }
@@ -395,19 +400,19 @@ function process-obfl () {
         declare -a obflUncorrectableList
         declare -a obflCaterrList
     # Find Correctable errors or CATERR and write them to the log file. 
-    writeStatus "Searching OBFl logs for errors" "INFO"
+    writeStatus "\tSearching OBFl logs for errors" "INFO"
     local obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR" {} \;)"
-    writeStatus "OBFL lines found:    $(echo "$obflFirstPass" | wc -l)\n"
+    writeStatus "\tOBFL lines found:    $(echo "$obflFirstPass" | wc -l)\n"
     # Break down each set of logs into its own variable.
     while IFS= read -r line; do
         if echo "$line" | egrep -qiE " correctable ECC"; then 
             obflCorrectableList+=("${line}")
         fi
-        if echo "$line" | egrep -qiE "uncorrectable"; then 
-            obflUncorrectableList+="${line}" 
+        if echo "$line" | egrep -qiE "uncorrectable|Non-recoverable"; then 
+            obflUncorrectableList+=("${line}") 
         fi
-        if echo "$line" | egrep -qiE "CATERR"; then 
-            obflCaterrList+="${line}"
+        if echo "$line" | egrep -qE "CATERR"; then 
+            obflCaterrList+=("${line}")
         fi
     done <<< "${obflFirstPass}"
     
