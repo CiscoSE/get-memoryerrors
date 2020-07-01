@@ -401,14 +401,14 @@ function process-obfl () {
         declare -a obflCaterrList
     # Find Correctable errors or CATERR and write them to the log file. 
     writeStatus "\tSearching OBFl logs for errors" "INFO"
-    local obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR" {} \;)"
-    writeStatus "\tOBFL lines found:    $(echo "$obflFirstPass" | wc -l)\n"
+    local obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR|Blacklisted by BMC" {} \;)"
+    writeStatus "\tOBFL lines found:    $(echo "$obflFirstPass" | wc -l)"
     # Break down each set of logs into its own variable.
     while IFS= read -r line; do
         if echo "$line" | egrep -qiE " correctable ECC"; then 
             obflCorrectableList+=("${line}")
         fi
-        if echo "$line" | egrep -qiE "uncorrectable|Non-recoverable"; then 
+        if echo "$line" | egrep -qiE "uncorrectable|Non-recoverable|Blacklisted by BMC"; then 
             obflUncorrectableList+=("${line}") 
         fi
         if echo "$line" | egrep -qE "CATERR"; then 
