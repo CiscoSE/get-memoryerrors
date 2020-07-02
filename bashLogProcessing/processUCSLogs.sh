@@ -53,16 +53,16 @@ function exitRoutine () {
 function createWorkingDirectory (){
     #Does the working directory exist?
     writeStatus "Checking for $workingDirectory directory."
-    if [ -d $workingDirectory ];then 
+    if [ -d "${workingDirectory}" ];then 
         writeStatus "Working Directory Exists" "INFO"
         #Make sure it is empty.
         writeStatus "Removing working directory to ensure we start out clean" "INFO"
-        rm -rf "$workingDirectory"
+        rm -rf "${workingDirectory}"
     fi
 
     #If it isn't, create it
-    writeStatus "Creating Working Directory: $workingDirectory"
-    mkdir $workingDirectory
+    writeStatus "Creating Working Directory: ${workingDirectory}"
+    mkdir "${workingDirectory}"
     if [ $? != 0 ]; then
         writeStatus "Could not create working directory" "FAIL"
     fi
@@ -112,7 +112,7 @@ function checkTarFile () {
 function untarFile () {
     writeStatus "Unpacking tar file: ${1}" "INFO"
     writeStatus "Destination: ${workingDirectory}" "INFO"
-    tar -xf "$1" -C "$workingDirectory"
+    tar -xf "${1}" -C "${workingDirectory}"
     if [ $? != 0 ]; then
         writeStatus "Unable to extract TAR file " "FAIL"
     fi
@@ -126,28 +126,28 @@ get-techSupportFileName () {
         writeStatus "We didn't find TechSupport.txt. Looking for tech_support often found in C series" "INFO"
         techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname 'tech_support')"
     fi 
-    if [ -z $techSupportFileName ]; then
+    if [ -z "${techSupportFileName}" ]; then
         writeStatus "No Tech support file found" "FAIL"
     fi
     writeStatus "techSupport File Path: ${techSupportFileName}"
 }
 get-ucsmServerPID (){
     writeStatus "Processing Server Product ID"
-    local ucsmServerPIDRaw="$(egrep -iE 'Board Product Name' $techSupportFileName | head -1)"
+    local ucsmServerPIDRaw="$(egrep -iE 'Board Product Name' "${techSupportFileName}" | head -1)"
     serverProperties="${ucsmServerPIDRaw}"
     writeStatus "Board Product Name(PID): $(echo $ucsmServerPIDRaw | cut -d ":" -f2 | xargs)"
 }
 
 get-ucsmServerSerial (){
     writeStatus "Processing Server Serial"
-    local ucsmServerSerialRaw="$(egrep -iE "Product Serial Number*${SerialNumber}" $techSupportFileName | head -1)"
+    local ucsmServerSerialRaw="$(egrep -iE "Product Serial Number*${SerialNumber}" "${techSupportFileName}" | head -1)"
     serverProperties="$serverProperties\n$ucsmServerSerialRaw"
     writeStatus "Server Serial: $(echo $ucsmServerSerialRaw | cut -d ":" -f2 | xargs)"
 }
 
 get-ucsmCIMCVersion (){
     writeStatus "Processing Server CIMC Version"
-    local ucsmServerVersionRaw="$(egrep -iE "ver:" $techSupportFileName | head -1)"
+    local ucsmServerVersionRaw="$(egrep -iE "ver:" "${techSupportFileName}" | head -1)"
     serverProperties="$serverProperties\n$ucsmServerVersionRaw"
     writeStatus "Server CIMC Firmware Version: $(echo $ucsmServerVersionRaw | cut -d ":" -f2 | xargs)"
 }
@@ -199,18 +199,18 @@ process-DimmBL (){
 writeStatus "Searching for DIMM Errors in DimmBL.log"
     #Location is not stable, so we search broadly in var
     local ucsmDimmBlFileLoc="$(find "${workingDirectory}/var" -type f -iname "DimmBL.log" -o -iname "DIMM-BL_Status.txt" | head -1)"
-    if [ -z $ucsmDimmBlFileLoc ];then
+    if [ -z "${ucsmDimmBlFileLoc}" ];then
         writeStatus "DimmBL.log Location not found. No reporting from this file is possible" "WARN"
         return
     fi
     
     writeStatus "DimmBL.log Location: $ucsmDimmBlFileLoc"
-    dimmErrorCountFullList="$(cat $ucsmDimmBlFileLoc | awk '/[-\s]*PER DIMM ERROR COUNTS/,/^ *$/')"
+    dimmErrorCountFullList="$(cat "${ucsmDimmBlFileLoc}" | awk '/[-\s]*PER DIMM ERROR COUNTS/,/^ *$/')"
     returnDimmsWithErrors "${dimmErrorCountFullList}"
     reportDimmsWithErrors "$dimmsWithErrorsFull"
 }
 function get-MrcOutPathNormal (){
-     mrcOutFilePath="$(find $workingDirectory -type f -iname "MrcOut.txt" -o -iname MrcOut | head -1)"
+     mrcOutFilePath="$(find "${workingDirectory}" -type f -iname "MrcOut.txt" -o -iname MrcOut | head -1)"
 }
 function get-MrcOutPathNv (){
     # Looking for the MrcOut file within the nvram gz file normally found in ./tmp/
@@ -223,8 +223,8 @@ function get-MrcOutPathNv (){
         return
     else
         #Unzipping nvram.tar.gz file to access MrcOut file.
-        tar -xf "$nvramgzFilePath" -C "$workingDirectory"
-        mrcOutFilePath="$(find "$workingDirectory/nv" -type f -iname "MrcOut" | egrep -iE "MrcOut$|MrcOut.txt$" | head -1)"
+        tar -xf "$nvramgzFilePath" -C "${workingDirectory}"
+        mrcOutFilePath="$(find "${workingDirectory}/nv" -type f -iname "MrcOut" | egrep -iE "MrcOut$|MrcOut.txt$" | head -1)"
     fi
 }
 
@@ -390,6 +390,7 @@ function process-obflCaterr () {
         fi
         writeStatus "${caterrLine}" "WARN"
         for dimm in "${dimmsWithErrors[@]}"; do
+            echo "${caterrLine}"
             writeReport "\t${caterrLine}" "$dimm"
         done
     done
@@ -401,7 +402,7 @@ function process-obfl () {
         declare -a obflCaterrList
     # Find Correctable errors or CATERR and write them to the log file. 
     writeStatus "\tSearching OBFl logs for errors" "INFO"
-    local obflFirstPass="$(find "$workingDirectory/obfl" -type f -exec egrep -iE "correct|CATERR|Blacklisted by BMC" {} \;)"
+    local obflFirstPass="$(find "${workingDirectory}/obfl" -type f -exec egrep -iE "correct|CATERR|Blacklisted by BMC" {} \;)"
     writeStatus "\tOBFL lines found:    $(echo "$obflFirstPass" | wc -l)"
     # Break down each set of logs into its own variable.
     while IFS= read -r line; do
@@ -422,7 +423,7 @@ function process-obfl () {
 }
 
 function process-techSupport (){
-    techsupportFilePath="$(find "$workingDirectory/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
+    techsupportFilePath="$(find "${workingDirectory}/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
     adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
     adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
     writeStatus "========== ADDDC /PPR Events from Tech Support Log =========="
@@ -469,15 +470,15 @@ function processTarFile () {
     #Many customers will send logs for way more servers then we need to evaluate.
     #We use the serial number to figure out which one we really need.
     writeStatus "Processing tar.gz files" "INFO"
-    serverTarFilePath=$(find "$workingDirectory" -iname "C*.tar.gz" -exec zegrep --with-filename -iE $serialNumber {} \; | cut -d " " -f3)
+    serverTarFilePath="$(find "${workingDirectory}" -iname "C*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \;)"
     tarFilesReturned="$(echo "$serverTarFilePath" | wc -l)"
     if [ "$tarFilesReturned" -ne 1 ]; then
         writeStatus "Returned File Count for tar.gz files is: ${tarFilesReturned}" "INFO"
         writeStatus "Check your serial number. We find a single CIMC file with the serial number provided, but that isn't what we found." "FAIL"
         exit
     fi
-    writeStatus "Processing: $serverTarFilePath" "INFO"
-    untarFile $serverTarFilePath
+    writeStatus "Processing: ${serverTarFilePath}" "INFO"
+    untarFile "${serverTarFilePath}"
     get-systemInfo
 }
 
@@ -521,14 +522,14 @@ while :; do
 				shift
 		  fi
 		  ;;
-		--workingDirectory)
-		  if [ $2 ]; then
+		--working[Dd]irectory)
+		  if [ "$2" ]; then
 			  workingDirectory=${2}
 				shift
 		  fi
 		  ;;
 		--reportDirectory)
-		  if [ $2 ]; then
+		  if [ "$2" ]; then
 			  reportDirectory=$2
 				shift
 		  fi
@@ -563,9 +564,9 @@ validateReportDirectory
 createWorkingDirectory
 if [ ${tarFileName: -4} = '.tar' ]; then
     checkTarFile
-    untarFile "$tarFileName"
-elif [ ${tarFileName: -3} = 'tar.gz' ]; then
-    cp "$tarFileName" "$workingDirectory"
+    untarFile "${tarFileName}"
+elif [ ${tarFileName: -6} = 'tar.gz' ]; then
+    cp "$tarFileName" "${workingDirectory}"
 else
     writeStatus "File must end in .tar or .tar.gz, or we wont process it." "FAIL"
 fi
