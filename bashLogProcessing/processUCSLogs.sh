@@ -69,6 +69,7 @@ function createWorkingDirectory (){
 }
 
 function writeStatus (){
+    local lineOutput="$(echo -e "$1")"
     case $2 in
         FAIL)
            printf "%5s[ ${red} FAIL ${normal} ] ${1}\n" 
@@ -76,13 +77,13 @@ function writeStatus (){
            exitRoutine
         ;;
         WARN)
-            printf "%5s[ ${yellow} WARN ${normal} ] ${1}\n"
+            printf "    [ ${yellow} %s ${normal} ]\t%s \n" "WARN" "$lineOutput"
         ;;
         INFO)
-            printf "%5s[ ${green} INFO ${normal} ] ${1}\n"
+            printf "    [ ${green} %s ${normal} ]\t%s \n" "INFO" "$lineOutput"
         ;;
         *)
-            printf "%5s[ ${green} INFO ${normal} ] ${1}\n"
+            printf "    [ ${green} %s ${normal} ]\t%s \n" "INFO" "$lineOutput"
     esac
 }
 
@@ -96,7 +97,7 @@ function writeReport (){
     else
         local dimmName="$2"
     fi
-    printf -- "${1}\n" >> "${reportDirectory}/${serialNumber}/${serialNumber}-${dimmName}-${memoryReportDateTime}.report"
+    echo -e "${1}" >> "${reportDirectory}/${serialNumber}/${serialNumber}-${dimmName}-${memoryReportDateTime}.report"
 }
 
 function checkTarFile () {
@@ -390,7 +391,6 @@ function process-obflCaterr () {
         fi
         writeStatus "${caterrLine}" "WARN"
         for dimm in "${dimmsWithErrors[@]}"; do
-            echo "${caterrLine}"
             writeReport "\t${caterrLine}" "$dimm"
         done
     done
