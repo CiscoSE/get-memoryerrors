@@ -423,14 +423,14 @@ function process-obfl () {
 }
 
 function process-techSupport (){
-    techsupportFilePath="$(find "${workingDirectory}/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
-    adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
-    adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
+    local techsupportFilePath="$(find "${workingDirectory}/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
+    local adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
+    local adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
     writeStatus "========== ADDDC /PPR Events from Tech Support Log =========="
     write-ToEachDimmReport "\n========== ADDDC / PPR Events from Tech Support Log ==========\n"
     #Every line needs to go somoewhere. Either to a file it belongs to, or to every file we are writting to.
     while IFS= read -r line; do
-        lineWritten="false"
+        local lineWritten="false"
         if [ "${dimmsWithErrors[0]}" = "none" ] && [ $adddcSparingEventsCount -gt 0 ];then
             #If none is reported in dimmsWithErrors, write it to done and move on
             writeStatus "\t$(echo "$line" | cut -d '|' -f 2,3,4,5,6)"
@@ -454,6 +454,30 @@ function process-techSupport (){
         fi
     done <<< "${adddcSparingEvents}"
 }
+function processEngLogs () {
+    # This only applies to C series servers in stand alone mode. This is necessary to find ADDDC sparing events.
+    local engRepoDirectory="$(find "${workingDirectory}/mnt" -type d -iname "eng-repo")"
+    local engRepoDirectoryCount="$(find "${workingDirectory}/mnt" -type d -iname "eng-repo" | wc -l)"
+    if [ "$engRepoDirectoryCount" -eq 1 ]; then
+        writeStatus "Stand-Alone eng-repo Directory found"
+        writeStatus "\tDirectory:\t$engRepoDirectory"
+        # Find the ADDDC sparing events if they exist
+        local engSparingEvents="$(find "${engRepoDirectory}" | zegrep -iE "ADDDC|PPR")"
+        writeStatus "Found Eng-Log Events:\t$(echo $"engSparingEvents" | grep -c '^')"
+        echo "$engSparingEvents"
+    else
+        writeStatus "eng-repo is not in this log collection. Skipping."
+        return
+    fi
+    while IFS= read -r line; do
+        if echo "$line" | grep -q '|'; then
+            write-ToEachDimmReport "$(echo "$line" | cut -d '|' -f 2,3,4,5)"
+        else
+            write-ToEachDimmReport "$line"
+        fi
+    done <<< "${engSparingEvents}"
+
+}
 
 function get-systemInfo () {
     get-techSupportFileName
@@ -464,14 +488,22 @@ function get-systemInfo () {
     process-MrcOut
     process-techSupport
     process-obfl
+    processEngLogs
     }
 
 function processTarFile () {
     #Many customers will send logs for way more servers then we need to evaluate.
     #We use the serial number to figure out which one we really need.
     writeStatus "Processing tar.gz files" "INFO"
-    serverTarFilePath="$(find "${workingDirectory}" -iname "C*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \;)"
-    tarFilesReturned="$(echo "$serverTarFilePath" | wc -l)"
+    if [ "$(find "${workingDirectory}" -type f -iname "*.tar.gz" | wc -l)" -eq 1 ]; then
+        # if there is only one, we really expect it to be the right one, and we don't need to be careful what we search
+        serverTarFilePath="$(find "${workingDirectory}" -iname "*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \;)"
+        tarFilesReturned="$(find "${workingDirectory}" -iname "*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \; | wc -l)"
+    else
+        # UCS Manager often returns more then one, so we have to isolate out the IO modules before we search.
+        serverTarFilePath="$(find "${workingDirectory}" -iname "C*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \;)"
+        tarFilesReturned="$(find "${workingDirectory}" -iname "C*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \; | wc -l)"
+    fi
     if [ "$tarFilesReturned" -ne 1 ]; then
         writeStatus "Returned File Count for tar.gz files is: ${tarFilesReturned}" "INFO"
         writeStatus "Check your serial number. We find a single CIMC file with the serial number provided, but that isn't what we found." "FAIL"
