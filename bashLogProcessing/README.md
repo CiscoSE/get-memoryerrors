@@ -36,17 +36,20 @@ To run this script, you need the following information:
       --workingDirectory    Directory where files will be temporarily moved to for processing.
       --ReportDirectory     Directory where finished report will be created.
       --noReport            Prevents the Reports from by written. Used for debugging
-      -v                    verbose mode.
 ```
 
 Example 1:
 
-> ./processUCSlogs.sh --tarfileName /Volumes/RAM\ Disk/someTarfile_bc5_all.tar --serialNumber FCH12345678 --workingDirectory ./681234567_Working --ReportingDirectory ./681234567_Report
+```
+ ./processUCSlogs.sh --tarfileName /Volumes/RAM\ Disk/someTarfile_bc5_all.tar --serialNumber FCH12345678 --workingDirectory ./681234567_Working --ReportingDirectory ./681234567_Report
+```
 
 Write to specific directory and report directory for serial number FCH12345678 from provided tar file
 
 Example 2:
 
+```
 > ./processUCSlogs.sh --tarfileName /Volumes/RAM\ Disk/someTarfile_bc5_all.tar --serialNumber FCH12345678
+```
 
 Write to default working directory and report directory for serial number FCH12345678 from provided tar file
