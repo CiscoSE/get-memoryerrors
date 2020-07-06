@@ -11,7 +11,7 @@ This script searches common files in UCS Tech Support logs for common memory rel
     - Note that not all OBFL related events are written to reports.
 - eng-repo logs - For stand-alone C series, eng-repo logs are also searched for ADDDC sparing / PPR logs, if present. 
 
-This script does not address ever kind of possible error situation and is intended to help provide an initial cursory look at logs to find common issues. Cisco TAC may still require additional information from the Tech Support logs, and this script is not intended to over ride TAC direction. 
+This script does not address ever kind of possible error situation and is intended to help provide an initial cursory look at logs to find common issues. Cisco TAC may still require additional information from the Tech Support logs, and this script is not intended to override TAC direction. 
 
 Additional information regarding the assessment of memory related issues can be found on the Cisco website:
 
@@ -27,15 +27,17 @@ To run this script, you need the following information:
     - Due to permissions issues, you may need to chown / chmod this directory after assessing a stand-alone C series server.
 - By default the Report directory is created in the ./Reports folder. Each report is written to a sub directory named with the serial number of the server.
 
->  Usage: processUCSLogs.sh [--tarFileName [Path and File Name]] [--serialNumber [Server Serial Number]] [--workingDirectory [Working Directory Path]] --reportDirectory [Report Directory Path]...
->  Where:
->      -h                    Display this help and exit
->      --tarFileName         Full path to tar file obtained from UCS Managager. (Required)
->      --serialNumber        Serial number of server to be evaluated (Required)
->      --workingDirectory    Directory where files will be temporarily moved to for processing.
->      --ReportDirectory     Directory where finished report will be created.
->      --noReport            Prevents the Reports from by written. Used for debugging
->      -v                    verbose mode.
+```
+  Usage: processUCSLogs.sh [--tarFileName [Path and File Name]] [--serialNumber [Server Serial Number]] [--workingDirectory [Working Directory Path]] --reportDirectory [Report Directory Path]...
+  Where:
+      -h                    Display this help and exit
+      --tarFileName         Full path to tar file obtained from UCS Managager. (Required)
+      --serialNumber        Serial number of server to be evaluated (Required)
+      --workingDirectory    Directory where files will be temporarily moved to for processing.
+      --ReportDirectory     Directory where finished report will be created.
+      --noReport            Prevents the Reports from by written. Used for debugging
+      -v                    verbose mode.
+```
 
 Example 1:
 
