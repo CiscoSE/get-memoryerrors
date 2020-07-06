@@ -49,7 +49,7 @@ Write to specific directory and report directory for serial number FCH12345678 f
 Example 2:
 
 ```
-> ./processUCSlogs.sh --tarfileName /Volumes/RAM\ Disk/someTarfile_bc5_all.tar --serialNumber FCH12345678
+ ./processUCSlogs.sh --tarfileName /Volumes/RAM\ Disk/someTarfile_bc5_all.tar --serialNumber FCH12345678
 ```
 
 Write to default working directory and report directory for serial number FCH12345678 from provided tar file
