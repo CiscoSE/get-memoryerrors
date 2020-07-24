@@ -125,7 +125,7 @@ get-techSupportFileName () {
     #Most Stand alone fall into this catagory
     if [ -z "$techSupportFileName" ]; then
         writeStatus "We didn't find TechSupport.txt. Looking for tech_support often found in C series" "INFO"
-        techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname 'tech_support')"
+        techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname 'tech_support' -o -iname 'tech_support.txt')"
     fi 
     if [ -z "${techSupportFileName}" ]; then
         writeStatus "No Tech support file found" "FAIL"
