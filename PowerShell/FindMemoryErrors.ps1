@@ -229,7 +229,8 @@ Function toolLoadCheck {
     param()
     #These modules need to be loaded to move on.
     $modules = get-module
-    if ("Cisco.Ucs.Core" -in $modules.name -and "Cisco.UCSManager" -in $modules.name){
+    
+    if ("Cisco.UCSManager" -in $modules.name){
         Write-Event -type INFO -message "`tModules are loaded"
         return $true
     }
