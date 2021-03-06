@@ -119,16 +119,42 @@ function untarFile () {
     fi
 }
 get-techSupportFileName () {
-    writeStatus "Looking for TechSupport.txt files commonly found on blades" "INFO"
-    #Most blades fall into this catagory.
-    techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname "*TechSupport.txt")"
-    #Most Stand alone fall into this catagory
-    if [ -z "$techSupportFileName" ]; then
-        writeStatus "We didn't find TechSupport.txt. Looking for tech_support often found in C series" "INFO"
-        techSupportFileName="$(find "${workingDirectory}/tmp" -type f -iname 'tech_support' -o -iname 'tech_support.txt')"
-    fi 
-    if [ -z "${techSupportFileName}" ]; then
-        writeStatus "No Tech support file found" "FAIL"
+    #Checking scratchpad directory first. 
+    writeStatus "Looking for TechSupport.txt file." "INFO"
+    if [ -d "${workingDirectory}/mnt/scratchpad" ]; then
+        writeStatus "Directory ${workingDirectory}/mnt/scratchpad exists. Searching for TechSupport.txt file" "INFO"
+        techSupportFileNameSearch="$(find "${workingDirectory}/mnt/scratchpad" -type f \( -iname "*TechSupport.txt" -o -iname "*tech_support.txt" \) )"
+        if [ -z "${techSupportFileNameSearch})" ]; then
+            writeStatus "   TechSupport.txt not found in scratchpad directory" "INFO"
+        else
+            writeStatus "   Checking number of files found" "INFO"
+            techSupportFileNameSearchCount=$(echo -n techSupportFileNameSearch | grep -c '^')
+            if [ $techSupportFileNameSearchCount -eq 1 ]; then
+                writeStatus "TechSupport.txt found in scratchpad directory" "INFO"
+                techSupportFileName="${techSupportFileNameSearch}"
+            else
+                writeStatus "To many tech support files found. These logs are not compatible with this script" "FAIL"
+            fi
+        fi
+    else
+        writeStatus "scratchpad directory not found"
+    fi
+    #If we don't find it in scratchpad, we check tmp location.
+    if [ -z "${techSupportFileName}" ] && [ -d "${workingDirectory}/tmp" ]; then
+        writeStatus "Searching ${workingDirectory}/tmp for TechSupport file" "INFO"
+        techSupportFileNameSearch=''
+        techSupportFileNameSearch="$(find "${workingDirectory}/tmp" -type f \( -iname "*TechSupport.txt" -o -iname "*tech_support.txt" \) )"
+        if [[ -z "${techSupportFileNameSearch}" ]]; then
+            writeStatus "   TechSupport.txt not found in tmp directory" "FAIL"
+        else
+            techSupportFileNameSearchCount=$(echo -n techSupportFileNameSearch | grep -c '^')
+            if [ $techSupportFileNameSearchCount -eq 1 ]; then
+                writeStatus "TechSupport.txt found in tmp directory" "INFO"
+                techSupportFileName="${techSupportFileNameSearch}" 
+            else
+                writeStatus "To many tech support files found. These logs are not compatible with this script" "FAIL"
+            fi
+        fi
     fi
     writeStatus "techSupport File Path: ${techSupportFileName}"
 }
@@ -217,7 +243,33 @@ function get-MrcOutPathNv (){
     # Looking for the MrcOut file within the nvram gz file normally found in ./tmp/
     # Because the folder has a random sub folder name, we are using find to locate it.
     writeStatus "MrcOut.txt not found in BIOS directory. Trying nvram.tar.gz file" "INFO"
-    nvramgzFilePath="$(find "$workingDirectory/tmp" -type f -iname "*-nvram.tar.gz" | head -1)"
+    #See if scratchpad directory exists
+    if [ -d "${workingDirectory}/mnt/scratchpad" ]; then
+        writeStatus "Searching ${workingDirectory}/mnt/scratchpad for nvmram.tar.gz file" "INFO"
+        nvramFileSearch=$(find "${workingDirectory}/mnt/scratchpad" -type f -iname "*-nvram.tar.gz" )
+        nvramFileSearchCount="$(echo "${nvramFileSearch}" | grep -c "^" )"
+        if [ $nvramFileSearchCount -eq 1 ]; then
+            writeStatus "NVRAM File: ${nvramFileSearch}" "INFO"
+            nvramgzFilePath="${nvramFileSearch}"
+        elif [ $nvramFileSearchCount -gt 1 ]; then
+            writeStatus "To many nvram.tar.gz files found. Script may not function as intended" "WARN"
+            nvramgzFilePath=nvramFileSearch | head -1
+        fi
+    fi
+    # If we found nothing in scratch pad, we try tmp directory if it exists.
+    if [ -d "${workingDirectory}/tmp" ] && [ -z nvramgzFilePath ]; then
+        writeStatus "Searching ${workingDirectory}/tmp for nvmram.tar.gz file" "INFO"
+        nvramFileSearch=$(find "${workingDirectory}/tmp" -type f -iname "*-nvram.tar.gz" )
+        nvramFileSearchCount="$(echo "${nvramFileSearch}" | grep -c "^" )"
+        if [ $nvramFileSearchCount -eq 1 ]; then
+            writeStatus "NVRAM File: ${nvramFileSearch}" "INFO"
+            nvramgzFilePath="${nvramFileSearch}"
+        elif [ $nvramFileSearchCount -gt 1 ]; then
+            writeStatus "To many nvram.tar.gz files found. Script may not function as intended" "WARN"
+            nvramgzFilePath=nvramFileSearch | head -1
+        fi
+    fi 
+
     if [ -z "$nvramgzFilePath" ]; then
         #We didn't find the nvram.tar.gz file either with an MrcOut file. We are kind of out options. 
         writeStatus "MrcOut file cannot be found. Serials numbers and black listing data may not be available." "WARN"
@@ -423,9 +475,11 @@ function process-obfl () {
 }
 
 function process-techSupport (){
-    local techsupportFilePath="$(find "${workingDirectory}/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
-    local adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
-    local adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techsupportFilePath")"
+    writeStatus "Processing TechSupport.txt file"
+    #local techsupportFilePath="$(find "${workingDirectory}/tmp" -type f -iname "CIMC*TechSupport.txt" -o -iname "tech_support" | head -1)"
+    local adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techSupportFileName" | wc -l)"
+    #local adddcSparingEventsCount="$(egrep -E "ADDDC|PPR" "$techsupportFilePath" | wc -l)"
+    local adddcSparingEvents="$(egrep -E "ADDDC|PPR" "$techSupportFileName")"
     writeStatus "========== ADDDC /PPR Events from Tech Support Log =========="
     write-ToEachDimmReport "\n========== ADDDC / PPR Events from Tech Support Log ==========\n"
     #Every line needs to go somoewhere. Either to a file it belongs to, or to every file we are writting to.
