@@ -187,7 +187,7 @@ reportDimmsWithErrors () {
         dimmsWithErrors+=("none")
         writeStatus "No errors found in DimmBL log." "INFO"
         writeStatus "Writting Server properties to generic log file." "INFO"
-        writeReport "################ Server Preperties ################\n$serverProperties\n################################################"
+        writeReport "################ Server Properties ################\n$serverProperties\n################################################"
         writeReport "================ DIMM Error Report From DimmBL Log ================"
         writeStatus "Writing DimmBL error table to generic log file." "INFO"
         writeReport "$dimmErrorCountFullList"
