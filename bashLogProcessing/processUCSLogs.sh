@@ -555,8 +555,9 @@ function processTarFile () {
         tarFilesReturned="$(find "${workingDirectory}" -iname "*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \; | wc -l)"
     else
         # UCS Manager often returns more then one, so we have to isolate out the IO modules before we search.
-        serverTarFilePath="$(find "${workingDirectory}" -iname "C*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \;)"
-        tarFilesReturned="$(find "${workingDirectory}" -iname "C*.tar.gz" -exec zegrep --with-filename -ilE $serialNumber {} \; | wc -l)"
+        serverTarFilePath="$(find "${workingDirectory}" \( -iname "C*.tar.gz" -o -iname "Server*.tar.gz" \) -exec zegrep --with-filename -ilE $serialNumber {} \;)"
+        #TODO: This probably needs to be refined to simplify and improve efficency.
+        tarFilesReturned="$(find "${workingDirectory}" \( -iname "C*.tar.gz" -o -iname "Server*.tar.gz" \) -exec zegrep --with-filename -ilE $serialNumber {} \; | wc -l)"
     fi
     if [ "$tarFilesReturned" -ne 1 ]; then
         writeStatus "Returned File Count for tar.gz files is: ${tarFilesReturned}" "INFO"
