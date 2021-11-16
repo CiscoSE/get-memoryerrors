@@ -146,27 +146,6 @@ function Write-Event{
     }
 } 
 
-function write-screen {
-    param(
-        [parameter(mandatory=$false,position=0)]
-            [ValidatePattern("INFO|FAIL|WARN")]
-                                               [string]$type = "INFO",
-        [parameter(mandatory=$true,Position=1)][string]$message
-     )
-    switch($type){
-        "INFO" {$Color = "Green";  break}
-        "FAIL" {$Color = "RED";    break}
-        "WARN" {$Color = "Yellow"; break}
-    }
-    write-host " [ " -NoNewline
-    write-host $type -ForegroundColor $color -NoNewline
-    write-host " ]     " -NoNewline
-    write-host $message
-    if ($type -eq "FAIL") {
-        exit
-    }    
-}
-
 Function format-Log {
     param(
         $LogFilePath,
