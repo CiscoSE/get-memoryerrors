@@ -360,7 +360,7 @@ function main {
         if (-not (toolLoadCheck)){
             get-module -ListAvailable -name Cisco.UCSManager | import-module -verbose:$false 
             if (-not (toolLoadCheck)){
-                write-Event -type FAIL -message "Failed to load tools, script cannot continue"
+                write-Event -type "FAIL" -message "Failed to load tools, script cannot continue"
             }
         }
         #Connect to UCS
