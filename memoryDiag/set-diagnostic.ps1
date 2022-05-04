@@ -1,9 +1,35 @@
+<#
+.NOTES
+Copyright (c) 2022 Cisco and/or its affiliates.
+This software is licensed to you under the terms of the Cisco Sample
+Code License, Version 1.0 (the "License"). You may obtain a copy of the
+License at
+               https://developer.cisco.com/docs/licenses
+All use of the material herein must be in accordance with the terms of
+the License. All rights not expressly granted by the License are
+reserved. Unless required by applicable law or agreed to separately in
+writing, software distributed under the License is distributed on an "AS
+IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+or implied.
+#>
 [cmdletbinding()]
 param(
     [parameter(mandatory=$false)][pscredential]$Global:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password."),
     [parameter(mandatory=$false)]      [string]$Global:testName = "longMemoryTest",
-    [parameter(mandatory=$false)]      [switch]$failSafe = $true
+    [parameter(mandatory=$false)]      [switch]$failSafe = $false,
+    [parameter(mandatory=$true)]       [array]$DomainList
 )
+
+if ($failSafe -eq $false){
+    write-host "This script makes changes to UCS that can take down servers and make policy changes that cannot be undone."
+    write-host "WARNING: THIS SHOULD NEVER BE RUN AGAINST A DOMAIN WITH ACTIVE SERVERS. THEY WILL ALL GO DOWN!" -ForegroundColor "Red"
+    write-host "The intent of this script is to create a memory test for a new domain that has no active servers. The script will create a memory test policy and configure all discovered servers in the domain to run the 
+memory diagnostics immidiately. 
+
+If you understand the risks, rerun this script with the -failsafe switch
+"
+    exit
+}
 
 function write-screen {
     param(
@@ -70,7 +96,7 @@ function remove-ucsDiagnosticPolicy(){
     catch{
         write-screen -type "FAIL" -message "`tUnable to remove policy and cannot continue"
     }
-    write-screen -type "INFO" -message "Policy Recreation Successful"
+    write-screen -type "INFO" -message "`tPolicy Recreation Successful"
 }
 
 function check-DiagPolicy(){
