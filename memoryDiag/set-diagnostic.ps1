@@ -30,6 +30,10 @@ If you understand the risks, rerun this script with the -failsafe switch
 "
     exit
 }
+if (-not ($Global:Credentials)){
+    write-host "Credentials required. Script will exit."
+    exit
+}
 
 function write-screen {
     param(
@@ -118,9 +122,55 @@ function check-DiagPolicy(){
     
     }
     else{
+        write-screen -type "INFO" -message "`tCreating Memory Testing Policy: $($Global:testName)"
         create-DiagPolicy
     }
 
 }
 
-check-DiagPolicy
+Function toolLoadCheck {
+    param()
+    #These modules need to be loaded to move on.
+    $modules = get-module
+    
+    if ("Cisco.UCSManager" -in $modules.name){
+        write-screen -type INFO -message "`tModules are loaded"
+        return $true
+    }
+    else{
+        write-screen -type "WARN" -message "`tModules are not present"
+        return $false
+    }
+}
+
+function main {
+    param(
+        [string]$Domain
+    )
+    write-screen -type "INFO" -message "Processing Domain $Domain"
+    if ($defaultUCS){
+        write-screen "WARN" "We found $($defaultUCS.Ucs) is already connected. We will disconnect that domain before we continue"
+        # We already have a connected domain, and we need to fix that. 
+        hideDisconnectResult = disconnect-ucs 
+    }
+    if ((toolLoadCheck) -eq $false){
+        write-screen -type "INFO" -message "PowerShell modules for UCS are not active. Importing required modules"
+        get-module -ListAvailable -name Cisco.UCSManager | import-module -verbose:$false 
+        if (-not (toolLoadCheck)){
+            write-screen -type "FAIL" -message "Tool loading failed, and we cannot run without it."
+
+        }
+    }
+    $hideConnectionResult = connect-ucs -Name $domain -Credential $Credentials -ErrorAction:SilentlyContinue
+    if ("$?" -eq "False"){
+        write-screen -type "FAIL" -message "`tFailed to connect to domain. Script cannot continue.`n$($error[0])"
+    }
+    else{
+        write-screen -type "INFO" "Connection Successful"
+    } 
+    check-DiagPolicy
+}
+
+$DomainList | %{
+    main -domain $_
+}
