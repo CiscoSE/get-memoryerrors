@@ -17,7 +17,12 @@ param(
     [parameter(mandatory=$false)][pscredential]$Global:Credentials = (Get-Credential -Message "Enter the user name and password for access to UCS. All domains require the same password."),
     [parameter(mandatory=$false)]      [string]$Global:testName = "longMemoryTest",
     [parameter(mandatory=$false)]      [switch]$failSafe = $false,
-    [parameter(mandatory=$true)]       [array]$DomainList
+    [parameter(mandatory=$true)]       [array]$DomainList,
+    [parameter(mandatory=$false)]      [int]$butterFlyCount=100,
+    [parameter(mandatory=$false)]      [int]$prbskillerCount=100,
+    [parameter(mandatory=$false)]      [array]$serverList = @(
+        "sys/chassis-1/blade-1",
+        "sys/chassis-1/blade-2") 
 )
 
 if ($failSafe -eq $false){
@@ -58,8 +63,8 @@ function write-screen {
 function create-DiagPolicy(){
     try{
         $memTest = Get-UCSOrg root | Add-UcsManagedObject -ClassId diagRunPolicy -propertyMap @{Name = "$($Global:testName)"}
-        $memTest_1 = $memTest | add-UcsManagedObject -class diagMemoryTest -propertyMap @{cpuFilter="all-cpus"; id="1"; loopCount="100"; memChunkSize="big-chunk"; memSize="all"; order="1"; pattern="butterfly"; rn="test-1"; type="pmem2"}
-        $memTest_2 = $memTest | add-UcsManagedObject -class diagMemoryTest -propertyMap @{cpuFilter="all-cpus"; id="2"; loopCount="100"; memChunkSize="big-chunk"; memSize="all"; order="2"; pattern="prbs-killer"; rn="test-2"; type="pmem2"}
+        $memTest_1 = $memTest | add-UcsManagedObject -class diagMemoryTest -propertyMap @{cpuFilter="all-cpus"; id="1"; loopCount="$butterFlyCount";  memChunkSize="big-chunk"; memSize="all"; order="1"; pattern="butterfly"; rn="test-1"; type="pmem2"}
+        $memTest_2 = $memTest | add-UcsManagedObject -class diagMemoryTest -propertyMap @{cpuFilter="all-cpus"; id="2"; loopCount="$prbsKillerCount"; memChunkSize="big-chunk"; memSize="all"; order="2"; pattern="prbs-killer"; rn="test-2"; type="pmem2"}
     }
     catch{
         write-screen -type "FAIL" -message "`tUnable to create new policy. Unable to continue"
@@ -69,11 +74,11 @@ function create-DiagPolicy(){
 function check-DiagPolicyValues($objExisting){
     #We should get three objects here, or we do not have the right number of policies. 
     if ($objExisting.count -ne 3){
-        write-host "Policy is not configured properly"
+        write-screen -type "WARN" -message "`tPolicy is not configured properly"
         return $false
     }
     #We should match all of these parameters on the first memory test policy
-    If ($policyCheck[1].LoopCount    -ne "100" -or `
+    If ($policyCheck[1].LoopCount    -ne "$butterFlyCount" -or `
         $policyCheck[1].pattern      -ne "butterfly" -or `
         $policyCheck[1].CpuFilter    -ne "all-cpus" -or `
         $policyCheck[1].MemChunkSize -ne "big-chunk" -or `
@@ -82,7 +87,7 @@ function check-DiagPolicyValues($objExisting){
         return $false
     }
     #We shoudl match all of these parameters on the second memory test policy
-    If ($policyCheck[2].LoopCount    -ne "100" -or `
+    If ($policyCheck[2].LoopCount    -ne "$prbsKillerCount" -or `
         $policyCheck[2].pattern      -ne "prbs-killer" -or `
         $policyCheck[2].CpuFilter    -ne "all-cpus" -or `
         $policyCheck[2].MemChunkSize -ne "big-chunk" -or `
@@ -115,8 +120,9 @@ function check-DiagPolicy(){
             write-screen -type "INFO" -message "`tNo changes required for policy"
         }
         else{
-            write-screen -type "WARN" -message "`tPolicy is not set properly and will be recreated"
+            write-screen -type "INFO" -message "`tRemoving Existing Policy"
             remove-ucsDiagnosticPolicy
+            write-screen -type "INFO" -message "`tCreating New Policy"
             create-DiagPolicy
         }
     
@@ -142,6 +148,14 @@ Function toolLoadCheck {
         return $false
     }
 }
+function triggerMemoryTest{
+    param()
+    $serverList | %{
+        write-screen -type "INFO" -message "`tProcessessing Server for memory testing: $($_)"
+        $removeResult1 = Set-UcsManagedObject -ClassID "diagSrvCtrl" -propertyMap @{runPolicyName="$($Global:testName)";dn="$_"} -confirm:$false -force
+        $removeResult2 = set-UcsManagedObject -ClassID "diagSrvCtrl" -propertyMap @{dn="$_"; adminState="trigger"} -confirm:$false -force
+    }
+}
 
 function main {
     param(
@@ -151,7 +165,7 @@ function main {
     if ($defaultUCS){
         write-screen "WARN" "We found $($defaultUCS.Ucs) is already connected. We will disconnect that domain before we continue"
         # We already have a connected domain, and we need to fix that. 
-        hideDisconnectResult = disconnect-ucs 
+        disconnect-ucs 
     }
     if ((toolLoadCheck) -eq $false){
         write-screen -type "INFO" -message "PowerShell modules for UCS are not active. Importing required modules"
@@ -166,9 +180,10 @@ function main {
         write-screen -type "FAIL" -message "`tFailed to connect to domain. Script cannot continue.`n$($error[0])"
     }
     else{
-        write-screen -type "INFO" "Connection Successful"
+        write-screen -type "INFO" "`tConnection Successful"
     } 
     check-DiagPolicy
+    triggerMemoryTest
 }
 
 $DomainList | %{
