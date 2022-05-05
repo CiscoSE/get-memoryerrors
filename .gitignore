@@ -6,3 +6,5 @@ PowerShell/Processing/*
 PowerShell/ignoredFiles/*
 bashLogProcessing/Working/*
 bashLogProcessing/Reports/*
+Python/.DS_Store
+bashLogProcessing/.DS_Store
